@@ -12,6 +12,10 @@
 #define CAMERA_SIZE	4
 
 
+static int GetCameraClip( void ) {
+	return (MASK_SOLID|CONTENTS_PLAYERCLIP);
+}
+
 /*
 =============================================================================
 
@@ -204,12 +208,11 @@ static void CG_CalcVrect (void) {
 //==============================================================================
 // this causes a compiler bug on mac MrC compiler
 static void CG_StepOffset( void ) {
-	int		timeDelta;
-	
+	//mme
 	// smooth out stair climbing
-	timeDelta = cg.time - cg.stepTime;
+	float timeDelta = (cg.time - cg.playerCent->pe.stepTime) + cg.timeFraction;
 	if ( timeDelta < STEP_TIME ) {
-		cg.refdef.vieworg[2] -= cg.stepChange 
+		cg.refdef.vieworg[2] -= cg.playerCent->pe.stepChange 
 			* (STEP_TIME - timeDelta) / STEP_TIME;
 	}
 }
@@ -242,9 +245,6 @@ cg.refdefViewAngles
 
 ===============
 */
-  
-extern qboolean gCGHasFallVector;
-extern vec3_t gCGFallVector;
 
 /*
 ===============
@@ -256,23 +256,23 @@ static void CG_CalcIdealThirdPersonViewTarget(void)
 {
 	float thirdPersonVertOffset = cg_thirdPersonVertOffset.value;
 
-	if (cg.snap && cg.snap->ps.usingATST)
-	{
+	if (cg.playerPredicted && cg.snap && cg.snap->ps.usingATST) {
 		thirdPersonVertOffset = 200;
 	}
 
 	// Initialize IdealTarget
-	if (gCGHasFallVector)
-	{
+	if (gCGHasFallVector) {
 		VectorCopy(gCGFallVector, cameraFocusLoc);
-	}
-	else
-	{
+	} else {
 		VectorCopy(cg.refdef.vieworg, cameraFocusLoc);
 	}
 
 	// Add in the new viewheight
-	cameraFocusLoc[2] += cg.snap->ps.viewheight;
+	if (cg.playerPredicted) {
+		cameraFocusLoc[2] += cg.snap->ps.viewheight;
+	} else {
+		cameraFocusLoc[2] += cg.playerCent->pe.viewHeight;
+	}
 
 	// Add in a vertical offset from the viewpoint, which puts the actual target above the head, regardless of angle.
 //	VectorMA(cameraFocusLoc, thirdPersonVertOffset, cameraup, cameraIdealTarget);
@@ -332,14 +332,14 @@ static void CG_ResetThirdPersonViewDamp(void)
 	VectorCopy(cameraIdealTarget, cameraCurTarget);
 
 	// First thing we do is trace from the first person viewpoint out to the new target location.
-	CG_Trace(&trace, cameraFocusLoc, cameramins, cameramaxs, cameraCurTarget, cg.snap->ps.clientNum, MASK_CAMERACLIP);
+	CG_Trace(&trace, cameraFocusLoc, cameramins, cameramaxs, cameraCurTarget, cg.playerCent->currentState.number, MASK_CAMERACLIP);
 	if (trace.fraction <= 1.0)
 	{
 		VectorCopy(trace.endpos, cameraCurTarget);
 	}
 
 	// Now we trace from the new target location to the new view location, to make sure there is nothing in the way.
-	CG_Trace(&trace, cameraCurTarget, cameramins, cameramaxs, cameraCurLoc, cg.snap->ps.clientNum, MASK_CAMERACLIP);
+	CG_Trace(&trace, cameraCurTarget, cameramins, cameramaxs, cameraCurLoc, cg.playerCent->currentState.number, MASK_CAMERACLIP);
 	if (trace.fraction <= 1.0)
 	{
 		VectorCopy(trace.endpos, cameraCurLoc);
@@ -377,7 +377,7 @@ static void CG_UpdateThirdPersonTargetDamp(void)
 
 		// Note that since there are a finite number of "practical" delta millisecond values possible, 
 		// the ratio should be initialized into a chart ultimately.
-		ratio = powf(dampfactor, dtime);
+		ratio = Q_powf(dampfactor, dtime);
 		
 		// This value is how much distance is "left" from the ideal.
 		VectorMA(cameraIdealTarget, -ratio, targetdiff, cameraCurTarget);
@@ -387,7 +387,7 @@ static void CG_UpdateThirdPersonTargetDamp(void)
 	// Now we trace to see if the new location is cool or not.
 
 	// First thing we do is trace from the first person viewpoint out to the new target location.
-	CG_Trace(&trace, cameraFocusLoc, cameramins, cameramaxs, cameraCurTarget, cg.snap->ps.clientNum, MASK_CAMERACLIP);
+	CG_Trace(&trace, cameraFocusLoc, cameramins, cameramaxs, cameraCurTarget, cg.playerCent->currentState.number, MASK_CAMERACLIP);
 	if (trace.fraction < 1.0)
 	{
 		VectorCopy(trace.endpos, cameraCurTarget);
@@ -448,7 +448,7 @@ static void CG_UpdateThirdPersonCameraDamp(void)
 
 		// Note that since there are a finite number of "practical" delta millisecond values possible, 
 		// the ratio should be initialized into a chart ultimately.
-		ratio = powf(dampfactor, dtime);
+		ratio = Q_powf(dampfactor, dtime);
 		
 		// This value is how much distance is "left" from the ideal.
 		VectorMA(cameraIdealLoc, -ratio, locdiff, cameraCurLoc);
@@ -456,7 +456,7 @@ static void CG_UpdateThirdPersonCameraDamp(void)
 	}
 
 	// Now we trace from the new target location to the new view location, to make sure there is nothing in the way.
-	CG_Trace(&trace, cameraCurTarget, cameramins, cameramaxs, cameraCurLoc, cg.snap->ps.clientNum, MASK_CAMERACLIP);
+	CG_Trace(&trace, cameraCurTarget, cameramins, cameramaxs, cameraCurLoc, cg.playerCent->currentState.number, MASK_CAMERACLIP);
 
 	if (trace.fraction < 1.0)
 	{
@@ -510,12 +510,12 @@ static void CG_OffsetThirdPersonView( void )
 	VectorCopy( cg.refdefViewAngles, cameraFocusAngles );
 
 	// if dead, look at killer
-	if ( cg.snap->ps.stats[STAT_HEALTH] <= 0 ) 
-	{
+	if ( cg.snap->ps.stats[STAT_HEALTH] <= 0 && cg.playerPredicted) {
 		cameraFocusAngles[YAW] = cg.snap->ps.stats[STAT_DEAD_YAW];
-	}
-	else
-	{	// Add in the third Person Angle.
+	} else if ( cg.playerCent->currentState.eFlags & EF_DEAD ) {
+		cameraFocusAngles[YAW] = 0;
+		cameraFocusAngles[ROLL] = 0;
+	} else { // Add in the third Person Angle.
 		cameraFocusAngles[YAW] += cg_thirdPersonAngle.value;
 		cameraFocusAngles[PITCH] += cg_thirdPersonPitchOffset.value;
 	}
@@ -700,14 +700,20 @@ static void CG_OffsetFirstPersonView( void ) {
 	float			*origin;
 	float			*angles;
 	float			bob;
-	float			ratio;
 	float			delta;
 	float			speed;
 	float			f;
 	vec3_t			predictedVelocity;
-	int				timeDelta;
+	float			timeDelta;
 	
+	//mme
+	centity_t		*cent = cg.playerCent;
+	playerEntity_t	*pe = &cent->pe;
+
 	if ( cg.snap->ps.pm_type == PM_INTERMISSION ) {
+		return;
+	}
+	if ( !cent ) {
 		return;
 	}
 
@@ -715,7 +721,7 @@ static void CG_OffsetFirstPersonView( void ) {
 	angles = cg.refdefViewAngles;
 
 	// if dead, fix the angle and don't add any kick
-	if ( cg.snap->ps.stats[STAT_HEALTH] <= 0 ) {
+	if (cg.snap->ps.stats[STAT_HEALTH] <= 0 && cg.playerPredicted) {
 		angles[ROLL] = 40;
 		angles[PITCH] = -15;
 		angles[YAW] = cg.snap->ps.stats[STAT_DEAD_YAW];
@@ -727,8 +733,8 @@ static void CG_OffsetFirstPersonView( void ) {
 	VectorAdd (angles, cg.kick_angles, angles);
 
 	// add angles based on damage kick
-	if ( cg.damageTime ) {
-		ratio = cg.time - cg.damageTime;
+	if (cg.damageTime && cg.playerPredicted) {
+		float ratio = (cg.time - cg.damageTime) + cg.timeFraction;
 		if ( ratio < DAMAGE_DEFLECT_TIME ) {
 			ratio /= DAMAGE_DEFLECT_TIME;
 			angles[PITCH] += ratio * cg.v_dmg_pitch;
@@ -751,7 +757,11 @@ static void CG_OffsetFirstPersonView( void ) {
 #endif
 
 	// add angles based on velocity
-	VectorCopy( cg.predictedPlayerState.velocity, predictedVelocity );
+	if (cg.playerPredicted) {
+		VectorCopy( cg.predictedPlayerState.velocity, predictedVelocity );
+	} else { //mme
+		VectorCopy( cent->currentState.pos.trDelta, predictedVelocity );
+	}
 
 	delta = DotProduct ( predictedVelocity, cg.refdef.viewaxis[0]);
 	angles[PITCH] += delta * cg_runpitch.value;
@@ -764,26 +774,30 @@ static void CG_OffsetFirstPersonView( void ) {
 	// make sure the bob is visible even at low speeds
 	speed = cg.xyspeed > 200 ? cg.xyspeed : 200;
 
-	delta = cg.bobfracsin * cg_bobpitch.value * speed;
-	if (cg.predictedPlayerState.pm_flags & PMF_DUCKED)
-		delta *= 3;		// crouching
-	angles[PITCH] += delta;
-	delta = cg.bobfracsin * cg_bobroll.value * speed;
-	if (cg.predictedPlayerState.pm_flags & PMF_DUCKED)
-		delta *= 3;		// crouching accentuates roll
-	if (cg.bobcycle & 1)
-		delta = -delta;
-	angles[ROLL] += delta;
+	if (cg.playerPredicted) {
+		delta = cg.bobfracsin * cg_bobpitch.value * speed;
+		if (cg.predictedPlayerState.pm_flags & PMF_DUCKED)
+			delta *= 3;		// crouching
+		angles[PITCH] += delta;
+		delta = cg.bobfracsin * cg_bobroll.value * speed;
+		if (cg.predictedPlayerState.pm_flags & PMF_DUCKED)
+			delta *= 3;		// crouching accentuates roll
+		if (cg.bobcycle & 1)
+			delta = -delta;
+		angles[ROLL] += delta;
+	}
 
 //===================================
 
 	// add view height
-	origin[2] += cg.predictedPlayerState.viewheight;
+	//mme
+	origin[2] += pe->viewHeight;
 
 	// smooth out duck height changes
-	timeDelta = cg.time - cg.duckTime;
-	if ( timeDelta < DUCK_TIME) {
-		cg.refdef.vieworg[2] -= cg.duckChange 
+	//mme
+	timeDelta = (cg.time - pe->duckTime) + cg.timeFraction;
+	if ( timeDelta >= 0 && timeDelta < DUCK_TIME) {
+		origin[2] -= pe->duckChange 
 			* (DUCK_TIME - timeDelta) / DUCK_TIME;
 	}
 
@@ -793,18 +807,19 @@ static void CG_OffsetFirstPersonView( void ) {
 		bob = 6;
 	}
 
-	origin[2] += bob;
-
+	if (cg.playerPredicted)
+		origin[2] += bob;
 
 	// add fall height
-	delta = cg.time - cg.landTime;
+	//mme
+	delta = (cg.time - pe->landTime) + cg.timeFraction;
 	if ( delta < LAND_DEFLECT_TIME ) {
 		f = delta / LAND_DEFLECT_TIME;
-		cg.refdef.vieworg[2] += cg.landChange * f;
+		origin[2] += pe->landChange * f;
 	} else if ( delta < LAND_DEFLECT_TIME + LAND_RETURN_TIME ) {
 		delta -= LAND_DEFLECT_TIME;
 		f = 1.0 - ( delta / LAND_RETURN_TIME );
-		cg.refdef.vieworg[2] += cg.landChange * f;
+		origin[2] += pe->landChange * f;
 	}
 
 	// add step offset
@@ -910,28 +925,42 @@ CG_CalcFov
 Fixed fov at intermissions, otherwise account for fov variable and zooms.
 ====================
 */
-#define	WAVE_AMPLITUDE	1
-#define	WAVE_FREQUENCY	0.4
 float zoomFov; //this has to be global client-side
 
 static int CG_CalcFov( void ) {
 	float	x;
-	float	phase;
 	float	v;
 	int		contents;
 	float	fov_x, fov_y;
 	float	f;
 	int		inwater;
-	float	cgFov = cg_fov.value;
+	//[TrueView]
+	float	cgFov;
+	//float	cgFov = cg_fov.value;
+
+	if(cg.playerPredicted && (!cg.renderingThirdPerson
+		&& (cg.trueView
+		|| cg.predictedPlayerState.weapon == WP_SABER) 
+		&& cg_trueFOV.value && (cg.predictedPlayerState.pm_type != PM_SPECTATOR)
+		&& (cg.predictedPlayerState.pm_type != PM_INTERMISSION))) {
+		cgFov = cg_trueFOV.value;
+	} else if(!cg.renderingThirdPerson 
+		&& (cg.trueView
+		|| cg.playerCent->currentState.weapon == WP_SABER) 
+		&& cg_trueFOV.value && (cg.predictedPlayerState.pm_type != PM_INTERMISSION))
+	{
+		cgFov = cg_trueFOV.value;
+	}
+	else
+	{
+		cgFov = cg_fov.value;
+	}
+	//[/TrueView]
 
 	if (cgFov < 1)
-	{
 		cgFov = 1;
-	}
-	if (cgFov > 97)
-	{
-		cgFov = 97;
-	}
+	else if (cgFov > 180)
+		cgFov = 180;
 
 	if ( cg.predictedPlayerState.pm_type == PM_INTERMISSION ) {
 		// if in intermission, use a fixed value
@@ -945,10 +974,17 @@ static int CG_CalcFov( void ) {
 			fov_x = cgFov;
 			if ( fov_x < 1 ) {
 				fov_x = 1;
-			} else if ( fov_x > 160 ) {
-				fov_x = 160;
+			} else if ( fov_x > 180 ) {
+				fov_x = 180;
 			}
 		}
+
+		//will probably only work with base and base-based mods
+		if (!cg.playerPredicted && cg.zoomMode) {
+			fov_x *= 0.46f;
+			goto notZoom;
+		}
+		if (!cg.playerPredicted) goto notZoom;
 
 		if (cg.predictedPlayerState.zoomMode == 2)
 		{ //binoculars
@@ -988,7 +1024,7 @@ static int CG_CalcFov( void ) {
 				}
 				else
 				{	// Still zooming
-					static zoomSoundTime = 0;
+					static unsigned int zoomSoundTime = 0;
 
 					if (zoomSoundTime < cg.time || zoomSoundTime > cg.time + 10000)
 					{
@@ -1004,7 +1040,7 @@ static int CG_CalcFov( void ) {
 		{
 			zoomFov = 80;
 
-			f = ( cg.time - cg.predictedPlayerState.zoomTime ) / ZOOM_OUT_TIME;
+			f = ((cg.time - cg.predictedPlayerState.zoomTime) + cg.timeFraction) / ZOOM_OUT_TIME;
 			if ( f > 1.0 ) 
 			{
 				fov_x = fov_x;
@@ -1016,6 +1052,7 @@ static int CG_CalcFov( void ) {
 		}
 	}
 
+notZoom:
 	x = cg.refdef.width / tan( fov_x / 360 * M_PI );
 	fov_y = atan2( cg.refdef.height, x );
 	fov_y = fov_y * 360 / M_PI;
@@ -1023,8 +1060,7 @@ static int CG_CalcFov( void ) {
 	// warp if underwater
 	contents = CG_PointContents( cg.refdef.vieworg, -1 );
 	if ( contents & ( CONTENTS_WATER | CONTENTS_SLIME | CONTENTS_LAVA ) ){
-		phase = cg.time / 1000.0 * WAVE_FREQUENCY * M_PI * 2;
-		v = WAVE_AMPLITUDE * sin( phase );
+		v = WAVE_AMPLITUDE * sin((cg.time / 1000.0 + cg.timeFraction / 1000.0) * WAVE_FREQUENCY * M_PI * 2);
 		fov_x += v;
 		fov_y -= v;
 		inwater = qtrue;
@@ -1058,9 +1094,9 @@ CG_DamageBlendBlob
 
 ===============
 */
-static void CG_DamageBlendBlob( void ) 
+void CG_DamageBlendBlob( void ) 
 {
-	int			t;
+	float		t;
 	int			maxTime;
 	refEntity_t		ent;
 
@@ -1068,8 +1104,11 @@ static void CG_DamageBlendBlob( void )
 		return;
 	}
 
+	if ( !cg.playerPredicted )
+		return;
+
 	maxTime = DAMAGE_TIME;
-	t = cg.time - cg.damageTime;
+	t = (cg.time - cg.damageTime) + cg.timeFraction;
 	if ( t <= 0 || t >= maxTime ) {
 		return;
 	}
@@ -1162,6 +1201,79 @@ qboolean CheckOutOfConstrict(float curAng)
 	}
 
 	return qfalse;
+}
+
+int CG_DemosCalcViewValues( void ) {
+	entityState_t *es = &cg.playerCent->currentState;
+	memset( &cg.refdef, 0, sizeof( cg.refdef ) );
+
+	// calculate size of 3D view
+	CG_CalcVrect();
+
+	// intermission view
+	if ( cg.predictedPlayerState.pm_type == PM_INTERMISSION ) {
+		playerState_t *ps = &cg.predictedPlayerState;
+		VectorCopy( ps->origin, cg.refdef.vieworg );
+		VectorCopy( ps->viewangles, cg.refdefViewAngles );
+		AnglesToAxis( cg.refdefViewAngles, cg.refdef.viewaxis );
+		return CG_CalcFov();
+	}
+
+	if ( cg.playerPredicted ) {
+		cg.bobcycle = ( cg.predictedPlayerState.bobCycle & 128 ) >> 7;
+		cg.bobfracsin = fabs( sin( ( cg.predictedPlayerState.bobCycle & 127 ) / 127.0 * M_PI ) );
+	} else {
+		cg.bobcycle = 0;
+		cg.bobfracsin = 0;
+	}
+	cg.xyspeed = sqrt( es->pos.trDelta[0] * es->pos.trDelta[0] +
+		es->pos.trDelta[1] * es->pos.trDelta[1] );
+
+	if (cg.xyspeed > 270)
+	{
+		cg.xyspeed = 270;
+	}
+
+	VectorCopy( cg.playerCent->lerpOrigin, cg.refdef.vieworg );
+	VectorCopy( cg.playerCent->lerpAngles, cg.refdefViewAngles );
+
+	if (cg_cameraOrbit.integer) {
+		if (cg.time > cg.nextOrbitTime) {
+			cg.nextOrbitTime = cg.time + cg_cameraOrbitDelay.integer;
+			cg_thirdPersonAngle.value += cg_cameraOrbit.value;
+		}
+	}
+	// add error decay
+	if ( cg_errorDecay.value > 0 ) {
+		int		t;
+		float	f;
+
+		t = cg.time - cg.predictedErrorTime;
+		f = ( cg_errorDecay.value - t ) / cg_errorDecay.value;
+		if ( f > 0 && f < 1 ) {
+			VectorMA( cg.refdef.vieworg, f, cg.predictedError, cg.refdef.vieworg );
+		} else {
+			cg.predictedErrorTime = 0;
+		}
+	}
+
+	if ( cg.renderingThirdPerson && !cg.zoomMode) {
+		// back away from character
+		CG_OffsetThirdPersonView();
+	} else {
+		// offset for local bobbing and kicks
+		CG_OffsetFirstPersonView();
+	}
+
+	// position eye reletive to origin
+	AnglesToAxis( cg.refdefViewAngles, cg.refdef.viewaxis );
+
+	if ( cg.hyperspace ) {
+		cg.refdef.rdflags |= RDF_NOWORLDMODEL | RDF_HYPERSPACE;
+	}
+
+	// field of view
+	return CG_CalcFov();
 }
 
 /*
@@ -1264,7 +1376,7 @@ static int CG_CalcViewValues( void ) {
 CG_PowerupTimerSounds
 =====================
 */
-static void CG_PowerupTimerSounds( void ) {
+void CG_PowerupTimerSounds( void ) {
 	int		i;
 	int		t;
 
@@ -1303,7 +1415,7 @@ void CG_AddBufferedSound( sfxHandle_t sfx ) {
 CG_PlayBufferedSounds
 =====================
 */
-static void CG_PlayBufferedSounds( void ) {
+void CG_PlayBufferedSounds( void ) {
 	if ( cg.soundTime < cg.time ) {
 		if (cg.soundBufferOut != cg.soundBufferIn && cg.soundBuffer[cg.soundBufferOut]) {
 			trap_S_StartLocalSound(cg.soundBuffer[cg.soundBufferOut], CHAN_ANNOUNCER);
@@ -1319,15 +1431,19 @@ void CG_UpdateSoundTrackers()
 	int num;
 	centity_t *cent;
 
-	for ( num = 0 ; num < ENTITYNUM_NONE ; num++ )
-	{
+	for ( num = 0 ; num < ENTITYNUM_NONE ; num++ ) {
 		cent = &cg_entities[num];
 
-		if (cent && cent->currentState.eFlags & EF_SOUNDTRACKER)
+		if (cent && (cent->currentState.eFlags & EF_SOUNDTRACKER) && cent->currentState.number == num)
 		{ //keep sound for this entity updated in accordance with its attached entity at all times
-			if (cg.snap && cent->currentState.trickedentindex == cg.snap->ps.clientNum)
+			if (cg.playerCent && cent->currentState.trickedentindex == cg.playerCent->currentState.number)
 			{ //this is actually the player, so center the sound origin right on top of us
 				VectorCopy(cg.refdef.vieworg, cent->lerpOrigin);
+				trap_S_UpdateEntityPosition( cent->currentState.number, cent->lerpOrigin );
+			}
+			else if (cg.snap && !cg.playerCent && cent->currentState.trickedentindex == cg.snap->ps.clientNum)
+			{
+				VectorCopy(cg.snap->ps.origin, cent->lerpOrigin);
 				trap_S_UpdateEntityPosition( cent->currentState.number, cent->lerpOrigin );
 			}
 			else
@@ -1443,14 +1559,13 @@ CG_CalcScreenEffects
 Currently just for screen shaking (and music volume management)
 =================
 */
-void CG_CalcScreenEffects(void)
-{
-	CG_SE_UpdateShake(cg.refdef.vieworg, cg.refdefViewAngles);
+void CG_CalcScreenEffects(void) {
+	if (fx_Vibrate.integer == 0)
+		CG_SE_UpdateShake(cg.refdef.vieworg, cg.refdefViewAngles);
 	CG_SE_UpdateMusic();
 }
 
-void CGCam_Shake( float intensity, int duration )
-{
+void CGCam_Shake( float intensity, int duration ) {
 	if ( intensity > MAX_SHAKE_INTENSITY )
 		intensity = MAX_SHAKE_INTENSITY;
 
@@ -1489,12 +1604,14 @@ CG_DrawActiveFrame
 Generates and draws a game scene and status information at the given time.
 =================
 */
-void CG_DrawActiveFrame( int serverTime, stereoFrame_t stereoView, qboolean demoPlayback ) {
+extern void CG_SetPredictedThirdPerson(void);
+extern void trap_MVAPI_S_UpdateScale( float scale );
+void CG_DrawActiveFrame( int serverTime, stereoFrame_t stereoView, int demoPlayback ) {
 	int		inwater;
 
 	cg.time = serverTime;
 	cg.demoPlayback = demoPlayback;
-
+	
 	if (cg.snap && ui_myteam.integer != cg.snap->ps.persistant[PERS_TEAM])
 	{
 		trap_Cvar_Set ( "ui_myteam", va("%i", cg.snap->ps.persistant[PERS_TEAM]) );
@@ -1510,7 +1627,7 @@ void CG_DrawActiveFrame( int serverTime, stereoFrame_t stereoView, qboolean demo
 		return;
 	}
 
-	trap_FX_AdjustTime( cg.time, cg.refdef.vieworg, cg.refdef.viewaxis );
+	trap_FX_AdjustTime( cg.time, 0.0f, cg.frametime, cg.refdef.vieworg, cg.refdef.viewaxis );
 
 	CG_RunLightStyles();
 
@@ -1547,34 +1664,34 @@ void CG_DrawActiveFrame( int serverTime, stereoFrame_t stereoView, qboolean demo
 		trap_SetUserCmdValue( cg.weaponSelect, cg.zoomSensitivity, cg.forceSelect, cg.itemSelect );
 	}
 
+	CG_PreparePacketEntities( );
+
 	// this counter will be bumped for every valid scene we generate
 	cg.clientFrame++;
+	//mme
+	cg.playerCent = &cg_entities[cg.predictedPlayerState.clientNum];
+	cg.playerPredicted = qtrue;
 
 	// update cg.predictedPlayerState
 	CG_PredictPlayerState();
 
-	// decide on third person view
-	cg.renderingThirdPerson = cg_thirdPerson.integer || (cg.snap->ps.stats[STAT_HEALTH] <= 0);
+	// generate and add the entity from the playerstate
+	CG_CheckPlayerG2Weapons(&cg.predictedPlayerState, &cg_entities[cg.predictedPlayerState.clientNum]);
+	BG_PlayerStateToEntityState(&cg.predictedPlayerState, &cg_entities[cg.snap->ps.clientNum].currentState, qfalse);
+	cg_entities[cg.snap->ps.clientNum].currentValid = qtrue;
+	VectorCopy( cg_entities[cg.snap->ps.clientNum].currentState.pos.trBase, cg_entities[cg.snap->ps.clientNum].lerpOrigin );
+	VectorCopy( cg_entities[cg.snap->ps.clientNum].currentState.apos.trBase, cg_entities[cg.snap->ps.clientNum].lerpAngles );
 
-	if (cg.snap->ps.stats[STAT_HEALTH] > 0 && (cg.predictedPlayerState.weapon == WP_SABER || cg.predictedPlayerState.usingATST ||
-		cg.predictedPlayerState.forceHandExtend == HANDEXTEND_KNOCKDOWN || cg.predictedPlayerState.fallingToDeath))
-	{
-		if (cg_fpls.integer && cg.predictedPlayerState.weapon == WP_SABER)
-		{ //force to first person for fpls
-			cg.renderingThirdPerson = 0;
-		}
-		else
-		{
-			cg.renderingThirdPerson = 1;
-		}
-	}
-	else if (cg.snap->ps.zoomMode)
-	{ //always force first person when zoomed
-		cg.renderingThirdPerson = 0;
-	}
+	// decide on third person view
+	cg.trueView = (cg.playerCent->currentState.weapon == WP_SABER && cg_trueSaber.integer)
+		|| (cg.playerCent->currentState.weapon != WP_SABER && cg_trueGuns.integer);
+	cg.zoomMode = cg.snap->ps.zoomMode || cg.predictedPlayerState.zoomMode;
+	CG_SetPredictedThirdPerson();
 
 	// build cg.refdef
 	inwater = CG_CalcViewValues();
+	
+	cg.fallingToDeath = cg.snap->ps.fallingToDeath;
 
 	CG_CalcScreenEffects();
 
@@ -1592,8 +1709,7 @@ void CG_DrawActiveFrame( int serverTime, stereoFrame_t stereoView, qboolean demo
 	}
 	CG_AddViewWeapon( &cg.predictedPlayerState );
 
-	if ( !cg.hyperspace) 
-	{
+	if ( !cg.hyperspace) {
 		trap_FX_AddScheduledEffects();
 	}
 
@@ -1612,22 +1728,19 @@ void CG_DrawActiveFrame( int serverTime, stereoFrame_t stereoView, qboolean demo
 
 	// warning sounds when powerup is wearing off
 	CG_PowerupTimerSounds();
-
 	// if there are any entities flagged as sound trackers and attached to other entities, update their sound pos
 	CG_UpdateSoundTrackers();
-
-	if (gCGHasFallVector)
-	{
+ 
+	if (gCGHasFallVector) {
 		vec3_t lookAng;
-
-		VectorSubtract(cg.snap->ps.origin, cg.refdef.vieworg, lookAng);
+		VectorSubtract(cg.playerCent->lerpOrigin, cg.refdef.vieworg, lookAng);
 		VectorNormalize(lookAng);
 		vectoangles(lookAng, lookAng);
-
 		VectorCopy(gCGFallVector, cg.refdef.vieworg);
 		AnglesToAxis(lookAng, cg.refdef.viewaxis);
 	}
 
+	trap_MVAPI_S_UpdateScale( 1.0f );
 	// update audio positions
 	trap_S_Respatialize( cg.snap->ps.clientNum, cg.refdef.vieworg, cg.refdef.viewaxis, inwater );
 
@@ -1663,4 +1776,18 @@ void CG_DrawActiveFrame( int serverTime, stereoFrame_t stereoView, qboolean demo
 		CG_Printf( "cg.clientFrame:%i\n", cg.clientFrame );
 	}
 }
+
+//[TrueView]
+//Checks to see if the current camera position is valid based on the last known safe location.  If it's not safe, place
+//the camera at the last position safe location
+void CheckCameraLocation( vec3_t OldeyeOrigin ) {
+	trace_t			trace;
+	refdef_t		*refdef = &cg.refdef;//CG_GetRefdef();
+
+	CG_Trace(&trace, OldeyeOrigin, cameramins, cameramaxs, refdef->vieworg, cg.playerCent->currentState.number, GetCameraClip());
+	if (trace.fraction <= 1.0) {
+		VectorCopy(trace.endpos, refdef->vieworg);
+	}
+}
+//[/TrueView]
 

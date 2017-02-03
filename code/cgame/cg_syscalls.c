@@ -155,8 +155,8 @@ int		trap_CM_MarkFragments( int numPoints, const vec3_t *points,
 	return syscall( CG_CM_MARKFRAGMENTS, numPoints, points, projection, maxPoints, pointBuffer, maxFragments, fragmentBuffer );
 }
 
-void	trap_S_MuteSound( int entityNum, int entchannel ) {
-	syscall( CG_S_MUTESOUND, entityNum, entchannel );
+void	trap_S_StopSound( int entityNum, int entchannel, sfxHandle_t sfx ) {
+	syscall( CG_S_MUTESOUND, entityNum, entchannel, sfx );
 }
 
 void	trap_S_StartSound( vec3_t origin, int entityNum, int entchannel, sfxHandle_t sfx ) {
@@ -164,7 +164,11 @@ void	trap_S_StartSound( vec3_t origin, int entityNum, int entchannel, sfxHandle_
 }
 
 void	trap_S_StartLocalSound( sfxHandle_t sfx, int channelNum ) {
-	syscall( CG_S_STARTLOCALSOUND, sfx, channelNum );
+	//announcer is always hearable, rite?
+	if ( channelNum == CHAN_ANNOUNCER || channelNum == CHAN_LOCAL_SOUND )
+		syscall( CG_S_STARTSOUND, 0, ENTITYNUM_NONE, channelNum, sfx );
+	else
+		syscall( CG_S_STARTLOCALSOUND, sfx, channelNum );
 }
 
 void	trap_S_ClearLoopingSounds( qboolean killall ) {
@@ -226,7 +230,10 @@ qhandle_t trap_R_RegisterFont( const char *fontName )
 
 int	trap_R_Font_StrLenPixels(const char *text, const int iFontIndex, const float scale)
 {
-	return syscall( CG_R_FONT_STRLENPIXELS, text, iFontIndex, PASSFLOAT(scale));
+	//ent:
+	//Raz: HACK! RE_Font_TtrLenPixels only works correctly with 1.0f scale
+	float width = (float)syscall( CG_R_FONT_STRLENPIXELS, text, iFontIndex, PASSFLOAT(1.0f));
+	return width * scale;
 }
 
 int trap_R_Font_StrLenChars(const char *text)
@@ -239,9 +246,9 @@ int trap_R_Font_HeightPixels(const int iFontIndex, const float scale)
 	return syscall( CG_R_FONT_STRHEIGHTPIXELS, iFontIndex, PASSFLOAT(scale));
 }
 
-void trap_R_Font_DrawString(int ox, int oy, const char *text, const float *rgba, const int setIndex, int iCharLimit, const float scale)
+void trap_R_Font_DrawString(float ox, float oy, const char *text, const float *rgba, const int setIndex, int iCharLimit, const float scale)
 {
-	syscall( CG_R_FONT_DRAWSTRING, ox, oy, text, rgba, setIndex, iCharLimit, PASSFLOAT(scale));
+	syscall( CG_R_FONT_DRAWSTRING, PASSFLOAT(ox), PASSFLOAT(oy), text, rgba, setIndex, iCharLimit, PASSFLOAT(scale));
 }
 
 qboolean trap_Language_IsAsian(void)
@@ -534,12 +541,76 @@ void trap_FX_PlaySimpleEffectID( int id, vec3_t org )
 
 void trap_FX_PlayEffectID( int id, vec3_t org, vec3_t fwd )
 {
+	if (id == cgs.effects.rocketShotEffect				||
+		id == cgs.effects.repeaterAltProjectileEffect	||
+		id == cgs.effects.flechetteAltShotEffect 		||
+		id == cgs.effects.tripmineLaserFX 				||
+		id == cgs.effects.itemCone						||
+		id == cgs.effects.mSpawn						||
+		id == cgs.effects.mSparks						||
+		id == cgs.effects.bryarPowerupShotEffect		||
+		id == cgs.effects.bryarShotEffect				||
+		id == cgs.effects.turretShotEffect				||
+		id == cgs.effects.blasterShotEffect				||
+		id == cgs.effects.bowcasterShotEffect			||
+		id == cgs.effects.repeaterProjectileEffect		||
+		id == cgs.effects.repeaterAltProjectileEffect	||
+		id == cgs.effects.demp2ProjectileEffect			||
+		id == cgs.effects.flechetteShotEffect			||
+		id == cgs.effects.saberFizz) {
+			if (fx_vfps.integer <= 0)
+				fx_vfps.integer = 1;
+			if (fxT > cg.time)
+				fxT = cg.time;
+			if (doFX || cg.time - fxT >= (1000.0f / (float)fx_vfps.integer)) {
+				doFX = qtrue;
+				fxT = cg.time;
+			} else {
+				doFX = qfalse;
+				return;
+			}
+	}
+
+//	if (id == cgs.effects.itemCone && !(cg.frametime > 0
+//		&& ((cg.frametime < 17 && fmod((float)cg.time, 17.0f) <= cg.frametime)
+//		|| cg.frametime >= 17)))
+//		return;
+
 	syscall( CG_FX_PLAY_EFFECT_ID, id, org, fwd);
 }
 
 void trap_FX_PlayEntityEffectID( int id, vec3_t org, 
 						vec3_t axis[3], const int boltInfo, const int entNum )
 {
+	if (id == cgs.effects.forceLightning			||
+		id == cgs.effects.forceLightningWide		||
+		id == cgs.effects.forceDrainWide			||
+		id == cgs.effects.forceDrain				||
+		id == cgs.effects.mForceConfustion) {
+
+		if (fx_vfps.integer <= 0)
+			fx_vfps.integer = 1;
+		if (fxT > cg.time)
+			fxT = cg.time;
+		if (doFX || cg.time - fxT >= 1000 / fx_vfps.integer) {
+			doFX = qtrue;
+			fxT = cg.time;
+		} else {
+			doFX = qfalse;
+			return;
+		}
+
+		if (id != cgs.effects.mForceConfustion) {
+			if (!(cg.frametime > 0
+				&& ((cg.frametime < 5 && fmod((double)cg.time, 5.0) <= (double)cg.frametime)
+				|| cg.frametime >= 5)))
+				return;
+		} else if (!(cg.frametime > 0
+			&& ((cg.frametime < 17 && fmod((double)cg.time, 17.0) <= (double)cg.frametime)
+			|| cg.frametime >= 17)))
+			return;
+	}
+	
 	syscall( CG_FX_PLAY_ENTITY_EFFECT_ID, id, org, axis, boltInfo, entNum);
 }
 
@@ -563,9 +634,9 @@ qboolean trap_FX_FreeSystem( void )
 	return syscall( CG_FX_FREE_SYSTEM );
 }
 
-void trap_FX_AdjustTime( int time, vec3_t vieworg, vec3_t viewaxis[3] )
+void trap_FX_AdjustTime( int time, float timeFraction, float frametime, vec3_t vieworg, vec3_t viewaxis[3] )
 {
-	syscall( CG_FX_ADJUST_TIME, time, vieworg, viewaxis );
+	syscall( CG_FX_ADJUST_TIME, time, PASSFLOAT(timeFraction), PASSFLOAT(frametime), vieworg, viewaxis );
 }
 
 void trap_FX_AddPoly( addpolyArgStruct_t *p )
@@ -585,6 +656,28 @@ void trap_FX_AddPrimitive( effectTrailArgStruct_t *p )
 
 void trap_FX_AddSprite( addspriteArgStruct_t *p )
 {
+	if( p->shader == cgs.media.bryarFrontFlash			||
+		p->shader == cgs.media.greenFrontFlash			||
+		p->shader == cgs.media.lightningFlash			||
+		p->shader == cgs.media.yellowDroppedSaberShader	||
+		p->shader == cgs.media.redSaberGlowShader		||
+		p->shader == cgs.media.greenSaberGlowShader		||
+		p->shader == cgs.media.blueSaberGlowShader ) {
+			if (fx_vfps.integer <= 0)
+				fx_vfps.integer = 1;
+			if (fxT > cg.time)
+				fxT = cg.time;
+			if( doFX || cg.time - fxT >= 1000 / fx_vfps.integer )
+			{
+				doFX = qtrue;
+				fxT = cg.time;
+			}
+			else 
+			{
+				doFX = qfalse;
+				return;
+			}
+	}
 	syscall( CG_FX_ADDSPRITE, p );
 }
 
@@ -780,3 +873,47 @@ void trap_CG_RegisterSharedMemory(char *memory)
 /*
 Ghoul2 Insert End
 */
+
+// new MVAPI+MME syscalls
+mvversion_t trap_MVAPI_GetVersion(void) {
+	return syscall( MVAPI_GET_VERSION );
+}
+void trap_MVAPI_SetVersion(mvversion_t version) {
+	syscall( MVAPI_SET_MODULE_VERSION, version );
+}
+qboolean trap_MVAPI_Key_GetOverstrikeMode( void ) {
+	return syscall( MVAPI_KEY_GETOVERSTRIKEMODE );
+}
+void trap_MVAPI_Key_SetOverstrikeMode( qboolean state ) {
+	syscall( MVAPI_KEY_SETOVERSTRIKEMODE, state );
+}
+void trap_MVAPI_FX_Reset ( void ) {
+	syscall ( MVAPI_FX_RESET );
+}
+void trap_MVAPI_MME_Capture( const char *baseName, float fps, float focus, float radius ) {
+	syscall( MVAPI_MME_CAPTURE, baseName, PASSFLOAT(fps), PASSFLOAT( focus ), PASSFLOAT( radius ) );
+}
+int trap_MVAPI_MME_SeekTime( int seekTime ) {
+	return syscall( MVAPI_MME_SEEKTIME, seekTime );
+}
+void trap_MVAPI_MME_Music( const char *musicName, float time, float length ) {
+	syscall( MVAPI_MME_MUSIC, musicName, PASSFLOAT(time), PASSFLOAT(length) );
+}
+void trap_MVAPI_MME_TimeFraction( float timeFraction ) {
+	syscall( MVAPI_MME_TIMEFRACTION, PASSFLOAT(timeFraction) );
+}
+void trap_MVAPI_R_RatioFix( float ratio ) {
+	syscall( MVAPI_R_RATIOFIX, PASSFLOAT(ratio) );
+}
+void trap_MVAPI_NTDetected( qboolean detected ) {
+	syscall( MVAPI_NT_DETECTED, detected );
+}
+void trap_MVAPI_RandomSeed( int time, float timeFraction ) {
+	syscall( MVAPI_RANDOMSEED, time, PASSFLOAT(timeFraction) );
+}
+void trap_MVAPI_S_UpdateScale( float scale ) {
+	syscall( MVAPI_S_UPDATE_SCALE, PASSFLOAT(scale) );
+}
+void trap_MVAPI_HighPrecision( qboolean enabled ) {
+	syscall( MVAPI_HIGH_PRECISION, enabled );
+}

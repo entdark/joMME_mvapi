@@ -31,12 +31,14 @@ typedef int cmp_t(const void *, const void *);
 void qsort(void *a, size_t n, size_t es, cmp_t *cmp);
 void	srand( unsigned seed );
 int		rand( void );
+int		isdigit( int c );
 
 // String functions
 size_t strlen( const char *string );
 char *strcat( char *strDestination, const char *strSource );
 char *strcpy( char *strDestination, const char *strSource );
 int strcmp( const char *string1, const char *string2 );
+int strncmp( const char *string1, const char *string2, size_t count );
 char *strchr( const char *string, int c );
 char *strstr( const char *string, const char *strCharSet );
 char *strncpy( char *strDest, const char *strSource, size_t count );
@@ -67,4 +69,5 @@ double tan( double x );
 int abs( int n );
 double fabs( double x );
 double acos( double x );
+double fmod( double x, double y );
 

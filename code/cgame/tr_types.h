@@ -1,3 +1,5 @@
+#pragma once
+
 // Copyright (C) 1999-2000 Id Software, Inc.
 //
 #ifndef __TR_TYPES_H
@@ -5,7 +7,15 @@
 
 
 #define	MAX_DLIGHTS		32			// can't be increased, because bit flags are used on surfaces
-#define	MAX_ENTITIES	1023		// can't be increased without changing drawsurf bit packing
+//#define	MAX_ENTITIES	1023		// can't be increased without changing drawsurf bit packing
+
+#define	REFENTITYNUM_BITS	16		// can't be increased without changing drawsurf bit packing
+#define	REFENTITYNUM_MASK	((1<<REFENTITYNUM_BITS) - 1)
+// the last N-bit number (2^REFENTITYNUM_BITS - 1) is reserved for the special world refentity,
+//  and this is reflected by the value of MAX_REFENTITIES (which therefore is not a power-of-2)
+#define	MAX_REFENTITIES		((1<<REFENTITYNUM_BITS) - 1)
+#define	REFENTITYNUM_WORLD	((1<<REFENTITYNUM_BITS) - 1)
+
 #define	MAX_MINI_ENTITIES	1024		
 
 // renderfx flags
@@ -101,7 +111,7 @@ typedef struct miniRefEntity_s
 	float				rotation;			// size 2 for RT_CYLINDER or number of verts in RT_ELECTRICITY
 
 	// misc
-	float		shaderTime;			// subtracted from refdef time to control effect start times
+	double		shaderTime;			// subtracted from refdef time to control effect start times
 	int			frame;				// also used as MODEL_BEAM's diameter
 
 } miniRefEntity_t;
@@ -306,13 +316,42 @@ typedef struct {
 
 #if !defined _WIN32
 
+#ifdef __linux__
+#define OPENGL_DRIVER_NAME	"libGL.so.1"
+#else
 #define OPENGL_DRIVER_NAME	"libGL.so"
+#endif
 
 #else
 
 #define OPENGL_DRIVER_NAME	"opengl32"
 
 #endif	// !defined _WIN32
+
+
+//MME
+typedef struct {
+	int			maxAnisotropy;
+	int			multiSamples;
+	int			glWidth;
+	int			glHeight;
+	qboolean	framebufferObject;
+	qboolean	framebufferMultiSample;
+	qboolean	shaderSupport;
+} glMMEConfig_t;
+
+typedef enum {
+	mmeShotFormatTGA,
+	mmeShotFormatJPG,
+	mmeShotFormatPNG,
+	mmeShotFormatAVI,
+} mmeShotFormat_t;
+
+typedef enum {
+	mmeShotTypeRGB,
+	mmeShotTypeRGBA,
+	mmeShotTypeGray,
+} mmeShotType_t;
 
 
 #endif	// __TR_TYPES_H

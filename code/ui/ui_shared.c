@@ -517,50 +517,50 @@ qboolean String_Parse(char **p, const char **out) {
 	return qfalse;
 }
 
+static qboolean isBack = qfalse;
 /*
 =================
 PC_String_Parse
 =================
 */
-qboolean PC_String_Parse(int handle, const char **out) 
-{
+qboolean PC_String_Parse(int handle, const char **out) {
 	static char*	squiggy = "}";
 	pc_token_t		token;
 
-	if (!trap_PC_ReadToken(handle, &token))
-	{
+	if (!trap_PC_ReadToken(handle, &token)) {
 		return qfalse;
 	}
 
-	if (token.string[0] == '@')	// Is it a localized text?
-	{
+	if (!Q_stricmp(token.string, "@MENUS_PLAY")
+		|| !Q_stricmp(token.string, "@MENUS_NEW")
+		|| !Q_stricmp(token.string, "@MENUS2_PLAY")
+		|| !Q_stricmp(token.string, "@MENUS2")) {
+		strcpy(token.string, "Demos");
+	} else if (!Q_stricmp(token.string, "@MENUS_START_PLAYING_NOW")) {
+		strcpy(token.string, "@MENUS_PLAY_BACK_A_RECORDED");
+	} else if (!Q_stricmp(token.string, "@MENUS_BACK")) {
+		isBack = qtrue;
+	}
+
+	if (token.string[0] == '@') { 	// Is it a localized text?
 		char *temp;
 		char	text[MAX_STRING_CHARS*4];
-		temp = &token.string[0];
-		
+		temp = &token.string[0];		
 									// The +1 is to offset the @ at the beginning of the text
 //		trap_SP_GetStringTextString(va("%s_%s",stripedFile,(temp+1)), text, sizeof(text));
 		trap_SP_GetStringTextString(                        temp+1  , text, sizeof(text));	// findmeste
 
-		if (text[0] == 0)		// Couldn't find it
-		{
+		if (text[0] == 0) {			// Couldn't find it
 			Com_Printf(va(S_COLOR_YELLOW "Unable to locate StripEd text '%s'\n", token.string));
 			*(out) = String_Alloc( token.string );
-		} 
-		else 
-		{
+		} else {
 			*(out) = String_Alloc(text);
 		}
-	}
-	else
-	{
+	} else {
 		// Save some memory by not return the end squiggy as an allocated string
-		if ( !Q_stricmp ( token.string, "}" ) )
-		{
+		if ( !Q_stricmp ( token.string, "}" ) ) {
 			*(out) = squiggy;
-		}
-		else
-		{
+		} else {
 			*(out) = String_Alloc(token.string);
 		}
 	}
@@ -590,7 +590,12 @@ qboolean PC_Script_Parse(int handle, const char **out) {
 	while ( 1 ) {
 		if (!trap_PC_ReadToken(handle, &token))
 			return qfalse;
-
+		if (!Q_stricmp(token.string, "multiplayermenu") && isBack) {
+			strcpy(token.string, "mainMenu");
+			isBack = qfalse;
+		} else if (!Q_stricmp(token.string, "multiplayermenu")) {
+			strcpy(token.string, "demo");
+		}
 		if (Q_stricmp(token.string, "}") == 0) {
 			*out = String_Alloc(script);
 			return qtrue;
@@ -1893,6 +1898,31 @@ qboolean Item_TextScroll_HandleKey ( itemDef_t *item, int key, qboolean down, qb
 			return qtrue;
 		}
 
+		if ( key == A_MWHEELUP )
+		{
+			scrollPtr->startPos--;
+			if (scrollPtr->startPos < 0)
+			{
+				scrollPtr->startPos = 0;
+				Display_MouseMove(NULL, DC->cursorx, DC->cursory);
+				return qfalse;
+			}
+			Display_MouseMove(NULL, DC->cursorx, DC->cursory);
+			return qtrue;
+		}
+		if ( key == A_MWHEELDOWN )
+		{
+			scrollPtr->startPos++;
+			if (scrollPtr->startPos > max)
+			{
+				scrollPtr->startPos = max;
+				Display_MouseMove(NULL, DC->cursorx, DC->cursory);
+				return qfalse;
+			}
+			Display_MouseMove(NULL, DC->cursorx, DC->cursory);
+			return qtrue;
+		}
+
 		// mouse hit
 		if (key == A_MOUSE1 || key == A_MOUSE2) 
 		{
@@ -2396,6 +2426,31 @@ qboolean Item_ListBox_HandleKey(itemDef_t *item, int key, qboolean down, qboolea
 				}
 				return qtrue;
 			}
+
+			if ( key == A_MWHEELUP )
+			{
+				listPtr->startPos -= ((int)item->special == FEEDER_Q3HEADS) ? viewmax : 1;
+				if (listPtr->startPos < 0)
+				{
+					listPtr->startPos = 0;
+					Display_MouseMove(NULL, DC->cursorx, DC->cursory);
+					return qfalse;
+				}
+				Display_MouseMove(NULL, DC->cursorx, DC->cursory);
+				return qtrue;
+			}
+			if ( key == A_MWHEELDOWN )
+			{
+				listPtr->startPos += ((int)item->special == FEEDER_Q3HEADS) ? viewmax : 1;
+				if (listPtr->startPos > max)
+				{
+					listPtr->startPos = max;
+					Display_MouseMove(NULL, DC->cursorx, DC->cursory);
+					return qfalse;
+				}
+				Display_MouseMove(NULL, DC->cursorx, DC->cursory);
+				return qtrue;
+			}
 		}
 		// mouse hit
 		if (key == A_MOUSE1 || key == A_MOUSE2) {
@@ -2582,7 +2637,7 @@ qboolean Item_Multi_HandleKey(itemDef_t *item, int key) {
 	multiDef_t *multiPtr = (multiDef_t*)item->typeData;
 	if (multiPtr) {
 	  if (Rect_ContainsPoint(&item->window.rect, DC->cursorx, DC->cursory) && item->window.flags & WINDOW_HASFOCUS && item->cvar) {
-			if (key == A_MOUSE1 || key == A_ENTER || key == A_MOUSE2 || key == A_MOUSE3) {
+			if (key == A_MOUSE1 || key == A_ENTER || key == A_MOUSE2 || key == A_MOUSE3 || key == A_MWHEELDOWN || key == A_MWHEELUP) {
 				int current = Item_Multi_FindCvarByValue(item) + 1;
 				int max = Item_Multi_CountSettings(item);
 				if ( current < 0 || current >= max ) {
@@ -4087,13 +4142,13 @@ void BindingFromName(const char *cvar) {
 				break;
 			}
 				DC->keynumToStringBuf( b1, g_nameBind1, 32 );
-				Q_strupr(g_nameBind1);
+// do NOT do this or it corrupts asian text!!!					Q_strupr(g_nameBind1);
 
 				b2 = g_bindings[i].bind2;
 				if (b2 != -1)
 				{
 					DC->keynumToStringBuf( b2, g_nameBind2, 32 );
-					Q_strupr(g_nameBind2);
+// do NOT do this or it corrupts asian text!!!					Q_strupr(g_nameBind2);
 
 					trap_SP_GetStringTextString("MENUS3_KEYBIND_OR",sOR, sizeof(sOR));
 
@@ -4349,14 +4404,14 @@ void Item_Model_Paint(itemDef_t *item)
 	memset( &refdef, 0, sizeof( refdef ) );
 	refdef.rdflags = RDF_NOWORLDMODEL;
 	AxisClear( refdef.viewaxis );
-	x = item->window.rect.x+1;
-	y = item->window.rect.y+1;
-	w = item->window.rect.w-2;
-	h = item->window.rect.h-2;
+	x = item->window.rect.x+1.0f;
+	y = item->window.rect.y+1.0f;
+	w = item->window.rect.w-2.0f;
+	h = item->window.rect.h-2.0f;
 
-	refdef.x = x * DC->xscale;
+	refdef.x = (x+w/2.0f-(w/2.0f)*DC->widthRatioCoef) * DC->xscale;
 	refdef.y = y * DC->yscale;
-	refdef.width = w * DC->xscale;
+	refdef.width = w*DC->widthRatioCoef * DC->xscale;
 	refdef.height = h * DC->yscale;
 
 	DC->modelBounds( item->asset, mins, maxs );
@@ -4375,7 +4430,7 @@ void Item_Model_Paint(itemDef_t *item)
 	{
 		origin[0] = item->textscale;
 	}
-	refdef.fov_x = (modelPtr->fov_x) ? modelPtr->fov_x : w;
+	refdef.fov_x = (modelPtr->fov_x) ? modelPtr->fov_x : w*DC->widthRatioCoef;
 	refdef.fov_y = (modelPtr->fov_y) ? modelPtr->fov_y : h;
 
 	refdef.fov_x = 45;
@@ -6127,7 +6182,7 @@ qboolean ItemParse_cvarStrList( itemDef_t *item, int handle ) {
 		}
 
 		//a normal StringAlloc ptr
-		if ((int)psString > 0)	
+		if (psString)
 		{
 			if (*psString == '}') {
 				return qtrue;
@@ -6190,7 +6245,7 @@ qboolean ItemParse_cvarFloatList( itemDef_t *item, int handle )
 		}
 			
 		//a normal StringAlloc ptr
-		if ((int)string > 0)	
+		if (string)	
 		{
 			if (*string == '}') 
 			{

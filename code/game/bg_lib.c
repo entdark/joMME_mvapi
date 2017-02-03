@@ -233,6 +233,16 @@ int strcmp( const char *string1, const char *string2 ) {
 	return *string1 - *string2;
 }
 
+int strncmp( const char *string1, const char *string2, size_t count ) {
+	size_t i = 0;
+	while ( *string1 == *string2 && *string1 && *string2 && i < count ) {
+		string1++;
+		string2++;
+		i++;
+	}
+	return *string1 - *string2;
+}
+
 
 char *strchr( const char *string, int c ) {
 	while ( *string ) {
@@ -771,6 +781,12 @@ int		rand( void ) {
 	return randSeed & 0x7fff;
 }
 
+#ifdef Q3_VM
+int isdigit( int c ) {
+	return (c >= '0') && (c <= '9');
+}
+#endif
+
 double atof( const char *string ) {
 	float sign;
 	float value;
@@ -1013,6 +1029,10 @@ int abs( int n ) {
 
 double fabs( double x ) {
 	return x < 0 ? -x : x;
+}
+
+double fmod( double x, double y ) {
+	return (x - y * floor(x / y));
 }
 
 

@@ -1,4 +1,4 @@
--o "../../base/vm/cgame"
+-o "vm/cgame"
 cg_main
 ..\cg_syscalls
 cg_consolecmds
@@ -42,3 +42,15 @@ q_math
 q_shared
 ui_shared
 cg_newDraw
+cg_demos
+cg_demos_camera
+cg_demos_capture
+cg_demos_dism
+cg_demos_dof
+cg_demos_hud
+cg_demos_line
+cg_demos_math
+cg_demos_move
+cg_demos_weather
+bg_demos
+qmalloc3

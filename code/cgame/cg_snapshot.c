@@ -42,6 +42,19 @@ static void CG_TransitionEntity( centity_t *cent ) {
 	// reset if the entity wasn't in the last frame or was teleported
 	if ( !cent->interpolate ) {
 		CG_ResetEntity( cent );
+	} else { //mme
+		int newHeight;
+		int maxs = ((cent->currentState.solid >> 16) & 255) - 32;
+		if ( maxs > 16 )
+			newHeight = DEFAULT_VIEWHEIGHT;
+		else
+			newHeight = CROUCH_VIEWHEIGHT;
+
+		if ( newHeight != cent->pe.viewHeight ) {
+			cent->pe.duckTime = cg.snap->serverTime;
+			cent->pe.duckChange = newHeight - cent->pe.viewHeight;
+			cent->pe.viewHeight = newHeight;
+		}
 	}
 
 	// clear the next state.  if will be set by the next CG_SetNextSnap
@@ -73,7 +86,7 @@ void CG_SetInitialSnapshot( snapshot_t *snap ) {
 	if ((cg_entities[snap->ps.clientNum].ghoul2 == NULL) && trap_G2_HaveWeGhoul2Models(cgs.clientinfo[snap->ps.clientNum].ghoul2Model))
 	{
 		trap_G2API_DuplicateGhoul2Instance(cgs.clientinfo[snap->ps.clientNum].ghoul2Model, &cg_entities[snap->ps.clientNum].ghoul2);
-		CG_CopyG2WeaponInstance(FIRST_WEAPON, cg_entities[snap->ps.clientNum].ghoul2);
+		CG_CopyG2WeaponInstance(&cg_entities[snap->ps.clientNum], FIRST_WEAPON, cg_entities[snap->ps.clientNum].ghoul2);
 	}
 	BG_PlayerStateToEntityState( &snap->ps, &cg_entities[ snap->ps.clientNum ].currentState, qfalse );
 
@@ -110,7 +123,7 @@ CG_TransitionSnapshot
 The transition point from snap to nextSnap has passed
 ===================
 */
-static void CG_TransitionSnapshot( void ) {
+void CG_TransitionSnapshot( void ) {
 	centity_t			*cent;
 	snapshot_t			*oldFrame;
 	int					i;
@@ -182,16 +195,17 @@ CG_SetNextSnap
 A new snapshot has just been read in from the client system.
 ===================
 */
-static void CG_SetNextSnap( snapshot_t *snap ) {
+void CG_SetNextSnap( snapshot_t *snap ) {
 	int					num;
 	entityState_t		*es;
 	centity_t			*cent;
 
 	cg.nextSnap = snap;
 
-	CG_CheckPlayerG2Weapons(&cg.snap->ps, &cg_entities[cg.snap->ps.clientNum]);
+	//CG_CheckPlayerG2Weapons(&cg.snap->ps, &cg_entities[cg.snap->ps.clientNum]);
 	BG_PlayerStateToEntityState( &snap->ps, &cg_entities[ snap->ps.clientNum ].nextState, qfalse );
-	cg_entities[ cg.snap->ps.clientNum ].interpolate = qtrue;
+	//cg_entities[ cg.snap->ps.clientNum ].interpolate = qtrue;
+	//No longer want to do this, as the cg_entities[clnum] and cg.predictedPlayerEntity are one in the same.
 
 	// check for extrapolation errors
 	for ( num = 0 ; num < snap->numEntities ; num++ ) 
@@ -244,7 +258,7 @@ times if the client system fails to return a
 valid snapshot.
 ========================
 */
-static snapshot_t *CG_ReadNextSnapshot( void ) {
+snapshot_t *CG_ReadNextSnapshot( void ) {
 	qboolean	r;
 	snapshot_t	*dest;
 

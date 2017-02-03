@@ -4,7 +4,7 @@
 #include "tr_types.h"
 #include "../game/bg_public.h"
 #include "cg_public.h"
-
+#include "../api/mvapi.h"
 
 // The entire cgame module is unloaded and reloaded on each level change,
 // so there is NO persistant data between levels on the client side.
@@ -73,8 +73,11 @@
 
 #define	NUM_CROSSHAIRS		10
 
-#define TEAM_OVERLAY_MAXNAME_WIDTH	12
-#define TEAM_OVERLAY_MAXLOCATION_WIDTH	16
+#define TEAM_OVERLAY_MAXNAME_WIDTH	32
+#define TEAM_OVERLAY_MAXLOCATION_WIDTH	64
+
+#define	WAVE_AMPLITUDE	1
+#define	WAVE_FREQUENCY	0.4
 
 #define	DEFAULT_MODEL			"kyle"
 #define	DEFAULT_TEAM_MODEL		"kyle"
@@ -84,6 +87,11 @@
 
 #define DEFAULT_REDTEAM_NAME		"Empire"
 #define DEFAULT_BLUETEAM_NAME		"Rebellion"
+
+#define JK2AWARDS
+
+extern int fxT;
+extern qboolean doFX;
 
 typedef enum {
 	FOOTSTEP_NORMAL,
@@ -144,6 +152,15 @@ typedef struct {
 	int				painDirection;	// flip from 0 to 1
 	int				lightningFiring;
 
+	//mme
+	int				viewHeight;
+	int				stepTime;
+	float			stepChange;
+	int				landTime;
+	float			landChange;
+	int				duckTime;
+	float			duckChange;
+
 	// machinegun spinning
 	float			barrelAngle;
 	int				barrelTime;
@@ -153,7 +170,20 @@ typedef struct {
 //=================================================
 
 
+typedef enum {
+	DISM_HEAD = 0,
+	DISM_LHAND,
+	DISM_RHAND,
+	DISM_LARM,
+	DISM_RARM,
+	DISM_LLEG,
+	DISM_RLEG,
+	DISM_WAIST,
+	DISM_SABER,
+	DISM_TOTAL
+} dismpart_t;
 
+void demoNowTrajectory( const trajectory_t *tr, vec3_t result );
 // centity_t have a direct corespondence with gentity_t in the game, but
 // only the entityState_t is directly communicated to the cgame
 typedef struct centity_s {
@@ -163,6 +193,7 @@ typedef struct centity_s {
 	qboolean		currentValid;	// true if cg.frame holds this entity
 
 	int				muzzleFlashTime;	// move to playerEntity?
+	qboolean		muzzleFlash;
 	int				previousEvent;
 	int				teleportFlag;
 
@@ -172,6 +203,7 @@ typedef struct centity_s {
 
 	vec3_t			damageAngles;
 	int				damageTime;
+	int				damageStartTime;
 
 	int				snapShotTime;	// last time this entity was found in a snapshot
 
@@ -192,6 +224,7 @@ typedef struct centity_s {
 	vec3_t			lerpAngles;
 
 	void			*ghoul2;
+	int				localAnimIndex; //index locally (game/cgame) to anim data for this skel
 	int				weapon;
 
 	void			*ghoul2weapon; //rww - pointer to ghoul2 instance of the current 3rd person weapon
@@ -204,10 +237,11 @@ typedef struct centity_s {
 	//at times
 	int				bolt1;
 	int				bolt2;
-	int				bolt3;
+	float			bolt3;
 	int				bolt4;
 
 	float			saberLength;
+	float			saberLengthOld;
 	int				saberExtendTime;
 
 	int				rootBone;
@@ -236,6 +270,12 @@ typedef struct centity_s {
 
 	int				teamPowerEffectTime;
 	qboolean		teamPowerType; //0 regen, 1 heal, 2 drain, 3 absorb
+
+	struct {
+		qboolean cut[DISM_TOTAL];  //limbs cut off //DISM_*
+		int deathtime;    //timepoint of death
+		int lastkiller;	
+	} dism;
 } centity_t;
 
 
@@ -291,6 +331,12 @@ typedef enum {
 	LEBS_BRASS
 } leBounceSoundType_t;	// fragment local entities can make sounds on impacts
 
+typedef enum {
+	LEFT_NONE,
+	LEFT_GIB,
+	LEFT_SABER
+} leFragmentType_t;			// fragment type
+
 typedef struct localEntity_s {
 	struct localEntity_s	*prev, *next;
 	leType_t		leType;
@@ -322,6 +368,10 @@ typedef struct localEntity_s {
 
 	leMarkType_t		leMarkType;		// mark to leave on fragment impact
 	leBounceSoundType_t	leBounceSoundType;
+	
+	leFragmentType_t	leFragmentType;
+	int bouncetime;
+	int limbpart;
 
 	union {
 		struct {
@@ -458,6 +508,9 @@ typedef struct {
 
 	vec3_t			color1;
 	vec3_t			color2;
+	qhandle_t		shaderOverride;
+	fxHandle_t		effectOverride;
+	char			saberModel[MAX_QPATH];
 
 	int				icolor1;
 
@@ -494,6 +547,7 @@ typedef struct {
 
 	qboolean		deferred;
 
+	qboolean		hide;
 	qboolean		newAnims;		// true if using the new mission pack animations
 	qboolean		fixedlegs;		// true if legs yaw is always the same as torso yaw
 	qboolean		fixedtorso;		// true if torso never changes yaw
@@ -533,6 +587,11 @@ typedef struct {
 
 	int				legsAnim;
 	int				torsoAnim;
+
+	//[RGBSabers]
+	vec3_t			rgb1;
+	vec3_t			rgb2;
+	//[/RGBSabers]
 } clientInfo_t;
 
 
@@ -630,13 +689,22 @@ typedef struct {
 // occurs, and they will have visible effects for #define STEP_TIME or whatever msec after
 
 #define MAX_PREDICTED_EVENTS	16
- 
+
+
+#define	MAX_CHATBOX_ITEMS		5
+typedef struct chatBoxItem_s
+{
+	char	string[MAX_SAY_TEXT];
+	int		time;
+	int		lines;
+} chatBoxItem_t;
+
 typedef struct {
 	int			clientFrame;		// incremented each frame
 
 	int			clientNum;
 	
-	qboolean	demoPlayback;
+	int			demoPlayback;
 	qboolean	levelShot;			// taking a level menu screenshot
 	int			deferredPlayerLoading;
 	qboolean	loading;			// don't defer players at initial startup
@@ -657,7 +725,8 @@ typedef struct {
 	qboolean	thisFrameTeleport;
 	qboolean	nextFrameTeleport;
 
-	int			frametime;		// cg.time - cg.oldTime
+	float		frametime;		// cg.time - cg.oldTime
+	float		timeFraction, oldTimeFraction;
 
 	int			time;			// this is the time value that the client
 								// is rendering at.
@@ -671,11 +740,17 @@ typedef struct {
 	qboolean	mapRestart;			// set on a map restart to set back the weapon
 
 	qboolean	renderingThirdPerson;		// during deaths, chasecams, etc
+	qboolean	trueView;
+	qboolean	playerPredicted;
+	centity_t		*playerCent;
+	
+	qboolean	zoomMode;
 
 	// prediction state
 	qboolean	hyperspace;				// true if prediction has hit a trigger_teleport
 	playerState_t	predictedPlayerState;
-	centity_t		predictedPlayerEntity;
+	//centity_t		predictedPlayerEntity;
+	//rww - I removed this and made it use cg_entities[clnum] directly.
 	qboolean	validPPS;				// clear until the first call to CG_PredictPlayerState
 	int			predictedErrorTime;
 	vec3_t		predictedError;
@@ -683,14 +758,14 @@ typedef struct {
 	int			eventSequence;
 	int			predictableEvents[MAX_PREDICTED_EVENTS];
 
-	float		stepChange;				// for stair up smoothing
-	int			stepTime;
+//	float		stepChange;				// for stair up smoothing
+//	int			stepTime;
 
-	float		duckChange;				// for duck viewheight smoothing
-	int			duckTime;
+//	float		duckChange;				// for duck viewheight smoothing
+//	int			duckTime;
 
-	float		landChange;				// for landing hard
-	int			landTime;
+//	float		landChange;				// for landing hard
+//	int			landTime;
 
 	// input state sent to server
 	int			weaponSelect;
@@ -706,6 +781,7 @@ typedef struct {
 
 	// view rendering
 	refdef_t	refdef;
+	refdef_t	refdefStereo;
 	vec3_t		refdefViewAngles;		// will be converted to refdef.viewaxis
 
 	float		constrictValue;
@@ -757,6 +833,7 @@ typedef struct {
 
 	// crosshair client ID
 	int			crosshairClientNum;
+	int			crosshairClientNumLeft;
 	int			crosshairClientTime;
 
 	// powerup active flashing
@@ -800,7 +877,7 @@ typedef struct {
 	int			weaponAnimationTime;
 
 	// blend blobs
-	float		damageTime;
+	int			damageTime;
 	float		damageX, damageY, damageValue;
 
 	// status bar head
@@ -852,12 +929,35 @@ Ghoul2 Insert Start
 */
 	int				testModel;
 	// had to be moved so we wouldn't wipe these out with the memset - these have STL in them and shouldn't be cleared that way
-	snapshot_t	activeSnapshots[2];
+	snapshot_t		activeSnapshots[2];
 /*
 Ghoul2 Insert End
 */
 
-	char				sharedBuffer[MAX_CG_SHARED_BUFFER_SIZE];
+	char			sharedBuffer[MAX_CG_SHARED_BUFFER_SIZE];
+
+	chatBoxItem_t	chatItems[MAX_CHATBOX_ITEMS];
+	int				chatItemActive;
+
+	int				eventTime;
+	int				eventOldTime;
+	float			eventRadius;
+	float			eventOldRadius;
+	float			eventCoeff;
+	float			eventOldCoeff;
+
+	int				chargeTime;
+	qboolean		charging;
+	
+	int				weapFrame;
+	int				weapFrameTime;
+
+	int				fallingToDeath;
+	int				tip;
+
+	qboolean		ntModDetected;
+
+	int				rainTime, rainNumber;
 } cg_t;
 
 #define MAX_TICS	14
@@ -948,6 +1048,31 @@ typedef struct {
 	qhandle_t	purpleSaberGlowShader;
 	qhandle_t	purpleSaberCoreShader;
 	qhandle_t	saberBlurShader;
+
+	//[RGBSabers]
+	qhandle_t	rgbSaberGlowShader;
+	qhandle_t	rgbSaberCoreShader;
+
+	qhandle_t	rgbSaberGlow2Shader;
+	qhandle_t	rgbSaberCore2Shader;
+	qhandle_t	rgbSaberTrail2Shader;
+
+	qhandle_t	rgbSaberGlow3Shader;
+	qhandle_t	rgbSaberCore3Shader;
+	qhandle_t	rgbSaberTrail3Shader;
+
+	qhandle_t	rgbSaberGlow4Shader;
+	qhandle_t	rgbSaberCore4Shader;
+	qhandle_t	rgbSaberTrail4Shader;
+
+	qhandle_t	rgbSaberGlow5Shader;
+	qhandle_t	rgbSaberCore5Shader;
+	qhandle_t	rgbSaberTrail5Shader;
+
+	qhandle_t	blackSaberGlowShader;
+	qhandle_t	blackSaberCoreShader;
+	qhandle_t	blackBlurShader;
+	//[/RGBSabers]
 
 	qhandle_t	yellowDroppedSaberShader;
 
@@ -1090,11 +1215,15 @@ typedef struct {
 	sfxHandle_t oneFragSound;
 
 #ifdef JK2AWARDS
+	sfxHandle_t firstImpressiveSound;
 	sfxHandle_t impressiveSound;
+	sfxHandle_t firstExcellentSound;
 	sfxHandle_t excellentSound;
-	sfxHandle_t deniedSound;
+	sfxHandle_t firstHumiliationSound;
 	sfxHandle_t humiliationSound;
+	sfxHandle_t deniedSound;
 	sfxHandle_t defendSound;
+	sfxHandle_t assistSound;
 #endif
 
 	sfxHandle_t takenLeadSound;
@@ -1211,6 +1340,15 @@ typedef struct {
 	sfxHandle_t	zoomEnd;
 	sfxHandle_t	disruptorZoomLoop;
 
+	// Force looping sounds
+	sfxHandle_t speedLoopSound;
+	sfxHandle_t protectLoopSound;
+	sfxHandle_t absorbLoopSound;
+	sfxHandle_t rageLoopSound;
+	sfxHandle_t seeLoopSound;
+
+	// Weather
+	qhandle_t	saberFlare; //and used for sun
 } cgMedia_t;
 
 
@@ -1275,15 +1413,24 @@ typedef struct
 	fxHandle_t	tripmineLaserFX;
 
 	//FORCE
-	fxHandle_t forceLightning;
-	fxHandle_t forceLightningWide;
+	fxHandle_t	forceLightning;
+	fxHandle_t	forceLightningWide;
 
-	fxHandle_t forceDrain;
-	fxHandle_t forceDrainWide;
-	fxHandle_t forceDrained;
+	fxHandle_t	forceDrain;
+	fxHandle_t	forceDrainWide;
+	fxHandle_t	forceDrained;
 
 	//TURRET
-	fxHandle_t turretShotEffect;
+	fxHandle_t	turretShotEffect;
+
+	fxHandle_t	itemCone;
+	fxHandle_t	mSparks;
+	fxHandle_t	mSpawn;
+	fxHandle_t	mForceConfustion;
+
+	//WEATHER
+	fxHandle_t	saberFizz;
+	fxHandle_t	rain;
 
 } cgEffects_t;
 
@@ -1366,6 +1513,14 @@ Ghoul2 Insert End
 
 	clientInfo_t	clientinfo[MAX_CLIENTS];
 
+	char			clientOverride[MAX_CLIENTS][MAX_INFO_STRING];
+	char			redOverride[MAX_INFO_STRING];
+	char			blueOverride[MAX_INFO_STRING];
+	char			allOverride[MAX_INFO_STRING];
+	char			friendlyOverride[MAX_INFO_STRING];
+	char			enemyOverride[MAX_INFO_STRING];
+	char			playerOverride[MAX_INFO_STRING];
+
 	// teamchat width is *3 because of embedded color codes
 	char			teamChatMsgs[TEAMCHAT_HEIGHT][TEAMCHAT_WIDTH*3+1];
 	int				teamChatMsgTimes[TEAMCHAT_HEIGHT];
@@ -1395,7 +1550,12 @@ Ghoul2 Insert End
 
 	// effects
 	cgEffects_t		effects;
+	
+	mmeFontInfo_t	textFont;
+	qboolean		textFontValid;
 
+	float widthRatioCoef;	//to make 2Ds be not stretched
+	char *gamename;
 } cgs_t;
 
 //==============================================================================
@@ -1541,7 +1701,65 @@ extern	vmCvar_t		cg_singlePlayerActive;
 extern  vmCvar_t		cg_recordSPDemo;
 extern  vmCvar_t		cg_recordSPDemoName;
 
+extern	vmCvar_t		cg_debugSaber;
+
 extern	vmCvar_t		ui_myteam;
+
+//JA
+extern	vmCvar_t	cg_chatBox;
+extern	vmCvar_t	cg_chatBoxHeight;
+
+//New MME cvars
+extern	vmCvar_t	mov_chatBeep;
+extern	vmCvar_t	mov_fragsOnly;
+extern	vmCvar_t	mov_captureName;
+extern	vmCvar_t	mov_captureFPS;
+
+extern	vmCvar_t	mov_filterMask;
+extern	vmCvar_t	mov_seekInterval;
+extern	vmCvar_t	mov_musicFile;
+extern	vmCvar_t	mov_musicStart;
+extern	vmCvar_t	mov_chaseRange;
+
+extern	vmCvar_t	mov_deltaYaw;
+extern	vmCvar_t	mov_deltaPitch;
+extern	vmCvar_t	mov_deltaRoll;
+
+extern	vmCvar_t	mov_smoothQuat;
+extern	vmCvar_t	mov_captureCvars;
+extern	vmCvar_t	mov_ratioFix;
+extern	vmCvar_t	mov_saberTeamColour;
+extern	vmCvar_t	mov_wallhack;
+
+extern	vmCvar_t	mov_dismember;
+extern	vmCvar_t	mov_forceNTdemo;
+
+extern	vmCvar_t	mov_absorbVisibility;
+extern	vmCvar_t	mov_absorbColour;
+extern	vmCvar_t	mov_protectColour;
+extern	vmCvar_t	mov_rageColour;
+
+extern	vmCvar_t	mme_demoFileName;
+
+extern	vmCvar_t	fx_Vibrate;
+extern	vmCvar_t	fx_vfps;
+
+extern	vmCvar_t	fx_disruptTime;
+extern	vmCvar_t	fx_disruptTeamColour;
+extern	vmCvar_t	fx_disruptSpiral;
+extern	vmCvar_t	fx_disruptCoreColor;
+extern	vmCvar_t	fx_disruptSpiralColor;
+
+extern	vmCvar_t	cg_trueEyePosition;
+extern	vmCvar_t	cg_trueFlip;
+extern	vmCvar_t	cg_trueFOV;
+extern	vmCvar_t	cg_trueGuns;
+extern	vmCvar_t	cg_trueMoveRoll;
+extern	vmCvar_t	cg_trueRoll;
+extern	vmCvar_t	cg_trueSaber;
+extern	vmCvar_t	cg_trueSpin;
+
+
 /*
 Ghoul2 Insert Start
 */
@@ -1568,7 +1786,8 @@ void CG_UpdateCvars( void );
 int CG_CrosshairPlayer( void );
 int CG_LastAttacker( void );
 void CG_LoadMenus(const char *menuFile);
-void CG_KeyEvent(int key, qboolean down);
+//void CG_KeyEvent(int key, qboolean down);
+qboolean CG_KeyEvent(int key, qboolean down);
 void CG_MouseEvent(int x, int y);
 void CG_EventHandling(int type);
 void CG_RankRunFrame( void );
@@ -1578,6 +1797,8 @@ void CG_NextInventory_f(void);
 void CG_PrevInventory_f(void);
 void CG_NextForcePower_f(void);
 void CG_PrevForcePower_f(void);
+
+float CG_Cvar_Get(const char *cvar);
 
 //
 // cg_view.c
@@ -1592,7 +1813,7 @@ void CG_ZoomDown_f( void );
 void CG_ZoomUp_f( void );
 void CG_AddBufferedSound( sfxHandle_t sfx);
 
-void CG_DrawActiveFrame( int serverTime, stereoFrame_t stereoView, qboolean demoPlayback );
+void CG_DrawActiveFrame( int serverTime, stereoFrame_t stereoView, int demoPlayback );
 /*
 Ghoul2 Insert Start
 */
@@ -1618,7 +1839,11 @@ void CG_DrawRotatePic2( float x, float y, float width, float height,float angle,
 void CG_DrawString( float x, float y, const char *string, 
 				   float charWidth, float charHeight, const float *modulate );
 
-void CG_DrawNumField (int x, int y, int width, int value,int charWidth,int charHeight,int style,qboolean zeroFill);
+int CG_Text_Width2(const char *text, float scale, int limit);
+int CG_Text_Height2(const char *text, float scale, int limit);
+void CG_Text_Paint2(float x, float y, float scale, vec4_t color, const char *text, qboolean shadowed );
+
+void CG_DrawNumField (float x, float y, int width, float value,float charWidth,float charHeight,int style,qboolean zeroFill);
 
 void CG_DrawStringExt( int x, int y, const char *string, const float *setColor, 
 		qboolean forceColor, qboolean shadow, int charWidth, int charHeight, int maxChars );
@@ -1675,7 +1900,6 @@ void CG_GetTeamColor(vec4_t *color);
 const char *CG_GetGameStatusText(void);
 const char *CG_GetKillerText(void);
 void CG_Draw3DModel( float x, float y, float w, float h, qhandle_t model, qhandle_t skin, vec3_t origin, vec3_t angles );
-void CG_Text_PaintChar(float x, float y, float width, float height, float scale, float s, float t, float s2, float t2, qhandle_t hShader);
 void CG_CheckOrderPending(void);
 const char *CG_GameTypeString(void);
 qboolean CG_YourTeamHasFlag(void);
@@ -1694,6 +1918,8 @@ void CG_NewClientInfo( int clientNum, qboolean entitiesInitialized );
 sfxHandle_t	CG_CustomSound( int clientNum, const char *soundName );
 void CG_PlayerShieldHit(int entitynum, vec3_t angles, int amount);
 
+void CG_ClientOverride_f(void);
+
 
 //
 // cg_predict.c
@@ -1704,6 +1930,10 @@ void CG_Trace( trace_t *result, const vec3_t start, const vec3_t mins, const vec
 					 int skipNumber, int mask );
 void CG_PredictPlayerState( void );
 void CG_LoadDeferredPlayers( void );
+
+qboolean CG_InKnockDown( int anim );
+
+void CG_StartBehindCamera(vec3_t start, vec3_t end, const vec3_t camOrg, const vec3_t camAxis[3], vec3_t entDirection);
 
 
 //
@@ -1729,6 +1959,9 @@ void CG_PositionEntityOnTag( refEntity_t *entity, const refEntity_t *parent,
 							qhandle_t parentModel, char *tagName );
 void CG_PositionRotatedEntityOnTag( refEntity_t *entity, const refEntity_t *parent, 
 							qhandle_t parentModel, char *tagName );
+
+void CG_CalcEntityLerpPositions( centity_t *cent );
+void CG_PreparePacketEntities( void );
 
 /*
 Ghoul2 Insert Start
@@ -1760,7 +1993,8 @@ void CG_MissileHitWall(int weapon, int clientNum, vec3_t origin, vec3_t dir, imp
 void CG_MissileHitPlayer( int weapon, vec3_t origin, vec3_t dir, int entityNum, qboolean alt_fire);
 
 void CG_AddViewWeapon (playerState_t *ps);
-void CG_AddPlayerWeapon( refEntity_t *parent, playerState_t *ps, centity_t *cent, int team, vec3_t newAngles, qboolean thirdPerson );
+void CG_AddViewWeaponDirect( centity_t *cent );
+void CG_AddPlayerWeapon( refEntity_t *parent, qboolean firstPerson, centity_t *cent, int team, vec3_t newAngles, qboolean thirdPerson );
 void CG_DrawWeaponSelect( void );
 void CG_DrawIconBackground(void);
 
@@ -1942,7 +2176,7 @@ int			trap_CM_MarkFragments( int numPoints, const vec3_t *points,
 
 // normal sounds will have their volume dynamically changed as their entity
 // moves and the listener moves
-void		trap_S_MuteSound( int entityNum, int entchannel );
+void		trap_S_StopSound( int entityNum, int entchannel, sfxHandle_t sfx );
 void		trap_S_StartSound( vec3_t origin, int entityNum, int entchannel, sfxHandle_t sfx );
 void		trap_S_StopLoopingSound(int entnum);
 
@@ -1973,7 +2207,7 @@ qhandle_t	trap_R_RegisterFont( const char *name );
 int			trap_R_Font_StrLenPixels(const char *text, const int iFontIndex, const float scale);
 int			trap_R_Font_StrLenChars(const char *text);
 int			trap_R_Font_HeightPixels(const int iFontIndex, const float scale);
-void		trap_R_Font_DrawString(int ox, int oy, const char *text, const float *rgba, const int setIndex, int iCharLimit, const float scale);
+void		trap_R_Font_DrawString(float ox, float oy, const char *text, const float *rgba, const int setIndex, int iCharLimit, const float scale);
 qboolean	trap_Language_IsAsian(void);
 qboolean	trap_Language_UsesSpaces(void);
 unsigned	trap_AnyLanguage_ReadCharFromString( const char *psText, int *piAdvanceCount, qboolean *pbIsTrailingPunctuation/* = NULL*/ );
@@ -2064,6 +2298,8 @@ qboolean	trap_Key_IsDown( int keynum );
 int			trap_Key_GetCatcher( void );
 void		trap_Key_SetCatcher( int catcher );
 int			trap_Key_GetKey( const char *binding );
+qboolean	trap_MVAPI_Key_GetOverstrikeMode( void );
+void		trap_MVAPI_Key_SetOverstrikeMode( qboolean state );
 
 void		BG_CycleInven(playerState_t *ps, int direction);
 int			BG_ProperForceIndex(int power);
@@ -2105,7 +2341,7 @@ void trap_FX_PlayBoltedEffectID( int id, sharedBoltInterface_t *fxObj );
 void trap_FX_AddScheduledEffects( void );
 int	trap_FX_InitSystem( void );	// called in CG_Init to purge the fx system.
 qboolean trap_FX_FreeSystem( void );	// ditches all active effects;
-void trap_FX_AdjustTime( int time, vec3_t vieworg, vec3_t viewaxis[3] );
+void trap_FX_AdjustTime( int time, float timeFraction, float frametime, vec3_t vieworg, vec3_t viewaxis[3] );
 
 void trap_FX_AddPoly( addpolyArgStruct_t *p );
 void trap_FX_AddBezier( addbezierArgStruct_t *p );
@@ -2134,7 +2370,7 @@ void	CG_ParticleSparks (vec3_t org, vec3_t vel, int duration, float x, float y, 
 void	CG_ParticleDust (centity_t *cent, vec3_t origin, vec3_t dir);
 void	CG_ParticleMisc (qhandle_t pshader, vec3_t origin, int size, int duration, float alpha);
 void	CG_ParticleExplosion (char *animStr, vec3_t origin, vec3_t vel, int duration, int sizeStart, int sizeEnd);
-const char *CG_GetStripEdString(char *refSection, char *refName);
+char *CG_GetStripEdString(char *refSection, char *refName);
 extern qboolean		initparticles;
 int CG_NewParticleArea ( int num );
 
@@ -2234,10 +2470,21 @@ void CG_CreateBBRefEnts(entityState_t *s1, vec3_t origin );
 
 void CG_InitG2Weapons(void);
 void CG_ShutDownG2Weapons(void);
-void CG_CopyG2WeaponInstance(int weaponNum, void *toGhoul2);
+void CG_CopyG2WeaponInstance(centity_t *cent, int weaponNum, void *toGhoul2);
 void CG_CheckPlayerG2Weapons(playerState_t *ps, centity_t *cent);
 
 extern void *g2WeaponInstances[MAX_WEAPONS];
 /*
 Ghoul2 Insert End
 */
+
+extern qboolean gCGHasFallVector;
+extern vec3_t gCGFallVector;
+
+
+//new MME additions
+#define movMaskClient		0x001
+#define movMaskPlayers		0x002
+#define movMaskMissiles		0x004
+#define movMaskItems		0x008
+#define movMaskFlags		0x010

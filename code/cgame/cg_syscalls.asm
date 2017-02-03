@@ -31,7 +31,7 @@ equ trap_CM_CapsuleTrace					 -28	; CG_CM_CAPSULETRACE
 equ trap_CM_TransformedBoxTrace				 -29	; CG_CM_TRANSFORMEDBOXTRACE 
 equ trap_CM_TransformedCapsuleTrace			 -30	; CG_CM_TRANSFORMEDCAPSULETRACE 
 equ trap_CM_MarkFragments					 -31	; CG_CM_MARKFRAGMENTS 
-equ trap_S_MuteSound						 -32	; CG_S_MUTESOUND 
+equ trap_S_StopSound						 -32	; CG_S_MUTESOUND 
 equ trap_S_StartSound						 -33	; CG_S_STARTSOUND 
 equ trap_S_StartLocalSound					 -34	; CG_S_STARTLOCALSOUND 
 equ trap_S_ClearLoopingSounds				 -35	; CG_S_CLEARLOOPINGSOUNDS 
@@ -156,6 +156,23 @@ equ trap_G2API_SetRootSurface				-300	; CG_G2_SETROOTSURFACE
 equ trap_G2API_SetSurfaceOnOff				-301	; CG_G2_SETSURFACEONOFF 
 equ trap_G2API_SetNewOrigin					-302	; CG_G2_SETNEWORIGIN 
 equ trap_CG_RegisterSharedMemory			-303	; CG_SET_SHARED_BUFFER 
+; mvapi general
+equ trap_MVAPI_ControlFixes					-704	; MVAPI_CONTROL_FIXES 
+equ trap_MVAPI_GetVersion					-705	; MVAPI_GET_VERSION 
+equ trap_MVAPI_SetVersion					-706	; MVAPI_SET_MODULE_VERSION 
+equ trap_MVAPI_Key_GetOverstrikeMode		-707	; MVAPI_KEY_GETOVERSTRIKEMODE 
+equ trap_MVAPI_Key_SetOverstrikeMode		-708	; MVAPI_KEY_SETOVERSTRIKEMODE 
+equ trap_MVAPI_S_UpdateScale				-709	; MVAPI_S_UPDATE_SCALE 
+equ trap_MVAPI_FX_Reset						-710	; MVAPI_FX_RESET 
+equ trap_MVAPI_R_RatioFix					-712	; MVAPI_R_RATIOFIX 
+equ trap_MVAPI_RandomSeed					-712	; MVAPI_RANDOMSEED 
+equ trap_MVAPI_NTDetected					-713	; MVAPI_RANDOMSEED 
+equ trap_MVAPI_HighPrecision				-714	; MVAPI_HIGH_PRECISION 
+; mvapi mme
+equ trap_MVAPI_MME_Capture					-901	; MVAPI_MME_CAPTURE 
+equ trap_MVAPI_MME_SeekTime					-902	; MVAPI_MME_SEEKTIME 
+equ trap_MVAPI_MME_Music					-903	; MVAPI_MME_MUSIC 
+equ trap_MVAPI_MME_TimeFraction				-904	; MVAPI_MME_TIMEFRACTION 
 
 
 ; hardcoded functions

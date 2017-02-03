@@ -92,6 +92,31 @@ set cc=..\..\..\bin\lcc -DQ3_VM -DMISSIONPACK -DCGAME -S -Wf-target=bytecode -Wf
 %cc% ../cg_newDraw.c
 @if errorlevel 1 goto quit
 
+%cc% ../cg_demos.c
+@if errorlevel 1 goto quit
+%cc% ../cg_demos_camera.c
+@if errorlevel 1 goto quit
+%cc% ../cg_demos_capture.c
+@if errorlevel 1 goto quit
+%cc% ../cg_demos_dism.c
+@if errorlevel 1 goto quit
+%cc% ../cg_demos_dof.c
+@if errorlevel 1 goto quit
+%cc% ../cg_demos_hud.c
+@if errorlevel 1 goto quit
+%cc% ../cg_demos_line.c
+@if errorlevel 1 goto quit
+%cc% ../cg_demos_math.c
+@if errorlevel 1 goto quit
+%cc% ../cg_demos_move.c
+@if errorlevel 1 goto quit
+%cc% ../cg_demos_weather.c
+@if errorlevel 1 goto quit
+%cc% ../bg_demos.c
+@if errorlevel 1 goto quit
+%cc% ../../qcommon/qmalloc3.c
+@if errorlevel 1 goto quit
+
 ..\..\..\bin\q3asm -f ../cgame
 @if errorlevel 1 goto quit
 

@@ -1,3 +1,5 @@
+#pragma once
+
 // Copyright (C) 1999-2000 Id Software, Inc.
 //
 #ifndef __Q_SHARED_H
@@ -31,9 +33,8 @@
 #include "bg_lib.h"
 
 #define assert(exp)     ((void)0)
-
-#define min(x,y) ((x)<(y)?(x):(y))
-#define max(x,y) ((x)>(y)?(x):(y))
+#define ptrdiff_t		int
+#define int64_t			long long
 
 #else
 
@@ -46,6 +47,16 @@
 #include <time.h>
 #include <ctype.h>
 #include <limits.h>
+#include <stddef.h>
+
+#endif
+
+
+
+#if defined(Q3_VM) || defined(CGAME) || defined(QAGAME) || defined(UI_EXPORTS)
+
+#define min(x,y) ((x)<(y)?(x):(y))
+#define max(x,y) ((x)>(y)?(x):(y))
 
 #endif
 
@@ -110,6 +121,7 @@ static ID_INLINE float BigFloat(const float *l) { FloatSwap(l); }
 #define LittleFloat
 
 #define	PATH_SEP '\\'
+#define Q3_LITTLE_ENDIAN
 
 #endif
 
@@ -120,15 +132,17 @@ static ID_INLINE float BigFloat(const float *l) { FloatSwap(l); }
 #define MAC_STATIC
 #define __cdecl
 #define __declspec(x)
-#define stricmp strcasecmp
 #define ID_INLINE inline 
 
 #ifdef __ppc__
 #define CPUSTRING	"MacOSX-ppc"
+#define Q3_BIG_ENDIAN
 #elif defined __i386__
 #define CPUSTRING	"MacOSX-i386"
+#define Q3_LITTLE_ENDIAN
 #else
 #define CPUSTRING	"MacOSX-other"
+#define Q3_LITTLE_ENDIAN
 #endif
 
 #define	PATH_SEP	'/'
@@ -188,6 +202,8 @@ static inline int LittleLong (int l) { return LongSwap(l); }
 #define BigFloat
 static inline float LittleFloat (const float l) { return FloatSwap(&l); }
 
+#define Q3_BIG_ENDIAN
+
 #endif
 
 //======================= LINUX DEFINES =================================
@@ -196,18 +212,76 @@ static inline float LittleFloat (const float l) { return FloatSwap(&l); }
 // just waste space and make big arrays static...
 #ifdef __linux__
 
-// bk001205 - from Makefile
-#define stricmp strcasecmp
-
 #define	MAC_STATIC // bk: FIXME
 #define ID_INLINE inline 
 
 #ifdef __i386__
 #define	CPUSTRING	"linux-i386"
+#elif defined(__amd64__) || defined(__x86_64__)
+#define	CPUSTRING	"linux-amd64"
 #elif defined __axp__
 #define	CPUSTRING	"linux-alpha"
 #else
 #define	CPUSTRING	"linux-other"
+#endif
+
+#if __FLOAT_WORD_ORDER == __BIG_ENDIAN
+#define Q3_BIG_ENDIAN
+#else
+#define Q3_LITTLE_ENDIAN
+#endif
+
+#define	PATH_SEP '/'
+
+// bk001205 - try
+#ifdef Q3_STATIC
+#define	GAME_HARD_LINKED
+#define	CGAME_HARD_LINKED
+#define	UI_HARD_LINKED
+#define	BOTLIB_HARD_LINKED
+#endif
+
+#if !idppc
+inline static short BigShort( short l) { return ShortSwap(l); }
+#define LittleShort
+inline static int BigLong(int l) { return LongSwap(l); }
+#define LittleLong
+inline static float BigFloat(const float *l) { return FloatSwap(l); }
+#define LittleFloat
+#else
+#define BigShort
+inline static short LittleShort(short l) { return ShortSwap(l); }
+#define BigLong
+inline static int LittleLong (int l) { return LongSwap(l); }
+#define BigFloat
+inline static float LittleFloat (const float *l) { return FloatSwap(l); }
+#endif
+
+#endif
+
+//======================= OPENBSD DEFINES =================================
+
+// the mac compiler can't handle >32k of locals, so we
+// just waste space and make big arrays static...
+#ifdef __OpenBSD__
+
+#define	MAC_STATIC // bk: FIXME
+#define ID_INLINE inline 
+
+#ifdef __i386__
+#define	CPUSTRING	"openbsd-i386"
+#elif (defined(__amd64__) || defined(__x86_64__)
+#define	CPUSTRING	"openbsd-amd64"
+#elif defined __axp__
+#define	CPUSTRING	"openbsd-alpha"
+#else
+#define	CPUSTRING	"openbsd-other"
+#endif
+
+#if BYTE_ORDER == BIG_ENDIAN
+#define Q3_BIG_ENDIAN
+#else
+#define Q3_LITTLE_ENDIAN
 #endif
 
 #define	PATH_SEP '/'
@@ -241,8 +315,6 @@ inline static float LittleFloat (const float *l) { return FloatSwap(l); }
 //======================= FreeBSD DEFINES =====================
 #ifdef __FreeBSD__ // rb010123
 
-#define stricmp strcasecmp
-
 #define MAC_STATIC
 #define ID_INLINE inline 
 
@@ -252,6 +324,12 @@ inline static float LittleFloat (const float *l) { return FloatSwap(l); }
 #define CPUSTRING       "freebsd-alpha"
 #else
 #define CPUSTRING       "freebsd-other"
+#endif
+
+#if BYTE_ORDER == BIG_ENDIAN
+#define Q3_BIG_ENDIAN
+#else
+#define Q3_LITTLE_ENDIAN
 #endif
 
 #define	PATH_SEP '/'
@@ -276,6 +354,16 @@ static float LittleFloat (const float *l) { return FloatSwap(l); }
 
 #endif
 
+#ifndef Q3_VM
+
+#if defined( Q3_BIG_ENDIAN ) && defined( Q3_LITTLE_ENDIAN )
+#error "Endianness defined as both big and little"
+#elif !defined( Q3_BIG_ENDIAN ) && !defined( Q3_LITTLE_ENDIAN )
+#error "Endianness not defined"
+#endif
+
+#endif
+
 //=============================================================
 
 //=============================================================
@@ -284,6 +372,8 @@ typedef unsigned char 		byte;
 typedef unsigned short		word;
 typedef unsigned long		ulong;
 
+typedef const char *LPCSTR;
+
 typedef enum {qfalse, qtrue}	qboolean;
 
 typedef int		qhandle_t;
@@ -291,6 +381,51 @@ typedef int		fxHandle_t;
 typedef int		sfxHandle_t;
 typedef int		fileHandle_t;
 typedef int		clipHandle_t;
+
+
+#ifndef Q3_VM
+
+//ent: Raz: can't think of a better place to put this atm,
+//		should probably be in the platform specific definitions
+#if defined (_MSC_VER) && (_MSC_VER >= 1600)
+
+	#include <stdint.h>
+
+	// vsnprintf is ISO/IEC 9899:1999
+	// abstracting this to make it portable
+	int Q_vsnprintf( char *str, size_t size, const char *format, va_list args );
+
+#elif defined (_MSC_VER)
+
+	#include <io.h>
+
+	typedef signed __int64 int64_t;
+	typedef signed __int32 int32_t;
+	typedef signed __int16 int16_t;
+	typedef signed __int8  int8_t;
+	typedef unsigned __int64 uint64_t;
+	typedef unsigned __int32 uint32_t;
+	typedef unsigned __int16 uint16_t;
+	typedef unsigned __int8  uint8_t;
+
+	// vsnprintf is ISO/IEC 9899:1999
+	// abstracting this to make it portable
+	int Q_vsnprintf( char *str, size_t size, const char *format, va_list args );
+#else // not using MSVC
+
+	#include <stdint.h>
+
+	#define Q_vsnprintf vsnprintf
+
+#endif
+
+#endif
+
+#define PAD(base, alignment)	(((base)+(alignment)-1) & ~((alignment)-1))
+#define PADLEN(base, alignment)	(PAD((base), (alignment)) - (base))
+
+#define PADP(base, alignment)	((void *) PAD((intptr_t) (base), (alignment)))
+
 
 #define G2_COLLISION_ENABLED
 
@@ -301,6 +436,8 @@ typedef int		clipHandle_t;
 #define	MAX_QINT			0x7fffffff
 #define	MIN_QINT			(-MAX_QINT-1)
 
+#define ARRAY_LEN(x)			(sizeof(x) / sizeof(*(x)))
+#define STRARRAY_LEN(x)			(ARRAY_LEN(x) - 1)
 
 // angle indexes
 #define	PITCH				0		// up / down
@@ -377,7 +514,11 @@ typedef enum {
 	BLOCKED_UPPER_LEFT_PROJ,
 	BLOCKED_LOWER_RIGHT_PROJ,
 	BLOCKED_LOWER_LEFT_PROJ,
-	BLOCKED_TOP_PROJ
+	BLOCKED_TOP_PROJ,
+	//Boot
+	BOOT_BLOCKED_DIAG_LEFT,
+	BOOT_BLOCKED_DIAG_RIGHT
+	//
 } saberBlockedType_t;
 
 
@@ -390,6 +531,14 @@ typedef enum
 	SABER_GREEN,
 	SABER_BLUE,
 	SABER_PURPLE,
+	//[RGBSaber]
+	SABER_RGB,
+	SABER_FLAME1,
+	SABER_ELEC1,
+	SABER_FLAME2,
+	SABER_ELEC2,
+	SABER_BLACK,
+	//[/RGBSaber]
 	NUM_SABER_COLORS
 
 } saber_colors_t;
@@ -418,7 +567,7 @@ typedef enum
 	NUM_FORCE_POWERS
 } forcePowers_t;
 
-typedef enum
+enum
 {
 	FORCE_LEVEL_0,
 	FORCE_LEVEL_1,
@@ -670,9 +819,17 @@ extern	vec4_t		colorDkGrey;
 extern	vec4_t		colorLtBlue;
 extern	vec4_t		colorDkBlue;
 
+extern const vec3_t defaultColors[10];
+int Q_parseColor( const char *p, const vec3_t numberColors[10], float *color );
+
 #define Q_COLOR_ESCAPE	'^'
 // you MUST have the last bit on here about colour strings being less than 7 or taiwanese strings register as colour!!!!
 #define Q_IsColorString(p)	( p && *(p) == Q_COLOR_ESCAPE && *((p)+1) && *((p)+1) != Q_COLOR_ESCAPE && *((p)+1) <= '7' && *((p)+1) >= '0' )
+// Correct version of the above for Q_StripColor
+#define Q_IsColorStringExt(p)	((p) && *(p) == Q_COLOR_ESCAPE && *((p)+1) && isdigit(*((p)+1))) // ^[0-9]
+
+#define Q_IsColorStringNT(p)	( p && *(p) == Q_COLOR_ESCAPE && *((p)+1) && *((p)+1) != Q_COLOR_ESCAPE && *((p)+1) <= 0x7F && *((p)+1) >= 0x00 )
+#define ColorIndexNT(c)			( (c) & 127 )
 
 
 #define COLOR_BLACK		'0'
@@ -695,6 +852,7 @@ extern	vec4_t		colorDkBlue;
 #define S_COLOR_WHITE	"^7"
 
 extern vec4_t	g_color_table[8];
+extern vec4_t	g_color_table_nt[128];
 
 #define	MAKERGB( v, r, g, b ) v[0]=r;v[1]=g;v[2]=b
 #define	MAKERGBA( v, r, g, b, a ) v[0]=r;v[1]=g;v[2]=b;v[3]=a
@@ -745,7 +903,7 @@ float Q_rsqrt( float f );		// reciprocal square root
 signed char ClampChar( int i );
 signed short ClampShort( int i );
 
-float powf ( float x, int y );
+float Q_powf ( float x, int y );
 
 // this isn't a real cheap function to call!
 int DirToByte( vec3_t dir );
@@ -883,7 +1041,7 @@ void CrossProduct( const vec3_t v1, const vec3_t v2, vec3_t cross );
 vec_t VectorNormalize (vec3_t v);		// returns vector length
 vec_t VectorNormalize2( const vec3_t v, vec3_t out );
 void Vector4Scale( const vec4_t in, vec_t scale, vec4_t out );
-void VectorRotate( vec3_t in, vec3_t matrix[3], vec3_t out );
+void VectorRotate( const vec3_t in, const vec3_t matrix[3], vec3_t out );
 int Q_log2(int val);
 
 float Q_acos(float c);
@@ -894,6 +1052,8 @@ float	Q_crandom( int *seed );
 
 #define random()	((rand () & 0x7fff) / ((float)0x7fff))
 #define crandom()	(2.0 * (random() - 0.5))
+
+void AxisToAngles( const vec3_t axis[3], vec3_t angles );
 
 void vectoangles( const vec3_t value1, vec3_t angles);
 void AnglesToAxis( const vec3_t angles, vec3_t axis[3] );
@@ -912,6 +1072,9 @@ void	AnglesSubtract( vec3_t v1, vec3_t v2, vec3_t v3 );
 float AngleNormalize360 ( float angle );
 float AngleNormalize180 ( float angle );
 float AngleDelta ( float angle1, float angle2 );
+
+void LerpOrigin( const vec3_t from, const vec3_t to, vec3_t out, float lerp );
+void LerpAngles( const vec3_t from, const vec3_t to, vec3_t out, float lerp );
 
 qboolean PlaneFromPoints( vec4_t plane, const vec3_t a, const vec3_t b, const vec3_t c );
 void ProjectPointOnPlane( vec3_t dst, const vec3_t p, const vec3_t normal );
@@ -979,6 +1142,7 @@ void SkipRestOfLine ( const char **data );
 void Parse1DMatrix (const char **buf_p, int x, float *m);
 void Parse2DMatrix (const char **buf_p, int y, int x, float *m);
 void Parse3DMatrix (const char **buf_p, int z, int y, int x, float *m);
+int Com_HexStrToInt( const char *str );
 
 void	QDECL Com_sprintf (char *dest, int size, const char *fmt, ...);
 
@@ -1012,14 +1176,35 @@ char	*Q_strlwr( char *s1 );
 char	*Q_strupr( char *s1 );
 char	*Q_strrchr( const char* string, int c );
 
+#ifndef Q3_VM
+
+// NON-portable (but faster) versions
+#ifdef WIN32
+static __inline int	Q_strnicmp (const char *s1, const char *s2, int n) { return strnicmp(s1, s2, n); }
+static __inline int	Q_strcmpi (const char *s1, const char *s2) { return strcmpi(s1, s2); }
+#else
+static inline int	Q_strnicmp (const char *s1, const char *s2, int n) { return strncasecmp(s1, s2, n); }
+static inline int	Q_strcmpi (const char *s1, const char *s2) { return strcasecmp(s1, s2); }
+#endif
+
+#endif
+
 // buffer size safe library replacements
 void	Q_strncpyz( char *dest, const char *src, int destsize );
 void	Q_strcat( char *dest, int size, const char *src );
 
+const char *Q_stristr( const char *s, const char *find);
+
+int Q_PrintStrlenNT( const char *string );
 // strlen that discounts Quake color sequences
 int Q_PrintStrlen( const char *string );
+
+char *Q_CleanStrNT( char *string );
 // removes color sequences from string
 char *Q_CleanStr( char *string );
+void Q_StripColor(char *text);
+void Q_StripColorNew(char *text);
+void Q_StripColorNewNT(char *text);
 
 //=============================================
 
@@ -1239,6 +1424,7 @@ typedef struct {
 #define	KEYCATCH_UI					0x0002
 #define	KEYCATCH_MESSAGE		0x0004
 #define	KEYCATCH_CGAME			0x0008
+#define	KEYCATCH_CGAMEEXEC		0x2000
 
 
 // sound channels
@@ -1915,6 +2101,32 @@ typedef enum {
 	CA_CINEMATIC		// playing a cinematic or a static pic, not connected to a server
 } connstate_t;
 
+// font support 
+
+#define GLYPH_START 0
+#define GLYPH_END 255
+#define GLYPHS_PER_FONT GLYPH_END - GLYPH_START + 1
+typedef struct {
+  int height;       // number of scan lines
+  int top;          // top of glyph in buffer
+  int bottom;       // bottom of glyph in buffer
+  int pitch;        // width for copying
+  int xSkip;        // x adjustment
+  int imageWidth;   // width of actual image
+  int imageHeight;  // height of actual image
+  float s;          // x offset in image where glyph starts
+  float t;          // y offset in image where glyph starts
+  float s2;
+  float t2;
+  qhandle_t glyph;  // handle to the shader with the glyph
+  char shaderName[32];
+} mmeGlyphInfo_t;
+
+typedef struct {
+  mmeGlyphInfo_t glyphs [GLYPHS_PER_FONT];
+  float glyphScale;
+  char name[MAX_QPATH];
+} mmeFontInfo_t;
 
 #define Square(x) ((x)*(x))
 
@@ -1990,7 +2202,7 @@ typedef struct {
 
 // For ghoul2 axis use
 
-typedef enum Eorientations
+enum Eorientations
 {
 	ORIGIN = 0, 
 	POSITIVE_X,
@@ -2063,5 +2275,26 @@ enum {
 };
 
 
+
+#define MME_SAMPLERATE	44100 //ja is full of 44khz mp3
+
+typedef struct {
+	fileHandle_t fileHandle;
+	int line;
+	int fileSize, filePos;
+	int depth;
+} BG_XMLParse_t;
+
+typedef struct BG_XMLParseBlock_s {
+	char *tagName;
+	qboolean (*openHandler)(BG_XMLParse_t *,const struct BG_XMLParseBlock_s *, void *);
+	qboolean (*textHandler)(BG_XMLParse_t *,const char *, void *);
+} BG_XMLParseBlock_t;
+
+extern int demo_protocols[];
+
+#ifdef Q3_VM
+#include "../qcommon/qmalloc.h"
+#endif
 
 #endif	// __Q_SHARED_H

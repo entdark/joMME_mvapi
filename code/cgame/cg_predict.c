@@ -54,6 +54,47 @@ void CG_BuildSolidList( void ) {
 			continue;
 		}
 	}
+
+	//ent from JA:
+	//rww - Horrible, terrible, awful hack.
+	//We don't send your client entity from the server,
+	//so it isn't added into the solid list from the snapshot,
+	//and in addition, it has no solid data. So we will force
+	//adding it in based on a hardcoded player bbox size.
+	//This will cause issues if the player box size is ever
+	//changed..
+	if (cg_numSolidEntities < MAX_ENTITIES_IN_SNAPSHOT)
+	{
+		vec3_t	playerMins = {-15, -15, DEFAULT_MINS_2};
+		vec3_t	playerMaxs = {15, 15, DEFAULT_MAXS_2};
+		int i, j, k;
+
+		i = playerMaxs[0];
+		if (i<1)
+			i = 1;
+		if (i>255)
+			i = 255;
+
+		// z is not symetric
+		j = (-playerMins[2]);
+		if (j<1)
+			j = 1;
+		if (j>255)
+			j = 255;
+
+		// and z playerMaxs can be negative...
+		k = (playerMaxs[2]+32);
+		if (k<1)
+			k = 1;
+		if (k>255)
+			k = 255;
+
+		cg_solidEntities[cg_numSolidEntities] = &cg_entities[cg.predictedPlayerState.clientNum];
+		cg_solidEntities[cg_numSolidEntities]->currentState.solid = (k<<16) | (j<<8) | i;
+
+		cg_numSolidEntities++;
+	}
+
 }
 
 /*
@@ -186,7 +227,7 @@ Generates cg.predictedPlayerState by interpolating between
 cg.snap->player_state and cg.nextFrame->player_state
 ========================
 */
-static void CG_InterpolatePlayerState( qboolean grabAngles ) {
+void CG_InterpolatePlayerState( qboolean grabAngles ) {
 	float			f;
 	int				i;
 	playerState_t	*out;
@@ -218,7 +259,7 @@ static void CG_InterpolatePlayerState( qboolean grabAngles ) {
 		return;
 	}
 
-	f = (float)( cg.time - prev->serverTime ) / ( next->serverTime - prev->serverTime );
+	f = (cg.timeFraction + ( cg.time - prev->serverTime )) / ( next->serverTime - prev->serverTime );
 
 	i = next->ps.bobCycle;
 	if ( i < prev->ps.bobCycle ) {
@@ -809,4 +850,37 @@ void CG_PredictPlayerState( void ) {
 	}
 }
 
+void CG_StartBehindCamera(vec3_t start, vec3_t end, const vec3_t camOrg, const vec3_t camAxis[3], vec3_t entDirection) {
+	vec3_t beamDirection, a, forwardDirection;
 
+	AxisToAngles(camAxis, a);
+	AngleVectors (a, forwardDirection, NULL, NULL);
+	VectorNormalize(forwardDirection);
+	VectorSubtract(start, camOrg, beamDirection);
+	VectorNormalize(beamDirection);
+
+	if (DotProduct(forwardDirection, beamDirection) < 0) {
+		vec3_t beamEnd;
+		trace_t trace;
+
+		if (end) {
+			vec3_t temp;
+			VectorCopy(start, temp);
+			VectorCopy(end, start);
+			VectorCopy(temp, end);
+			return;
+		}
+		if (!entDirection)
+			return;
+
+		VectorMA(start, 5000, entDirection, beamEnd);
+		CG_Trace(&trace, start, NULL, NULL, beamEnd, -1, CONTENTS_SOLID);
+
+		if (trace.fraction < 1.0f) {
+			VectorCopy(trace.endpos, beamEnd);
+			VectorInverse(entDirection);
+			VectorCopy(beamEnd, start);
+			return;
+		}
+	}
+}

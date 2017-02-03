@@ -110,6 +110,15 @@ typedef enum {
 	G2_MODELPART_RLEG
 } g2ModelParts_t;
 
+typedef enum {
+	G2_MODELPART_HEAD_15 = 10,
+	G2_MODELPART_WAIST_15,
+	G2_MODELPART_LARM_15,
+	G2_MODELPART_RARM_15,
+	G2_MODELPART_LLEG_15,
+	G2_MODELPART_RLEG_15
+} g2ModelParts15_t;
+
 #define G2_MODEL_PART	50
 
 typedef enum {
@@ -159,6 +168,9 @@ movement on the server game.
 ===================================================================================
 */
 
+extern qboolean demo15detected;
+extern qboolean saberShenanigans;
+
 
 typedef struct animation_s {
 	int		firstFrame;
@@ -172,6 +184,7 @@ typedef struct animation_s {
 
 extern qboolean			BGPAFtextLoaded;
 extern animation_t		bgGlobalAnimations[MAX_TOTALANIMATIONS];
+extern animation_t		bgGlobalAnimations15[MAX_TOTALANIMATIONS_15];
 
 // flip the togglebit every time an animation
 // changes so a restart of the same anim can be detected
@@ -200,7 +213,7 @@ typedef enum {
 } weaponstate_t;
 
 
-typedef enum {
+enum {
 	FORCE_MASTERY_UNINITIATED,
 	FORCE_MASTERY_INITIATE,
 	FORCE_MASTERY_PADAWAN,
@@ -825,6 +838,8 @@ typedef enum {
 // rww - Moved all this to bg_public so that we can access the saberMoveData stuff on the cgame
 // which is currently used for determining if a saber trail should be rendered in a given frame
 
+#define BOOT_SABERMOVES 16
+
 typedef enum {
 	// Invalid, or saber not armed
 	LS_NONE		= 0,
@@ -970,7 +985,11 @@ typedef enum {
 	LS_REFLECT_LR,
 	LS_REFLECT_LL,
 
-	LS_MOVE_MAX//
+	//Boot
+	BOOT_LS_PARRY_DIAG_LEFT,
+	BOOT_LS_PARRY_DIAG_RIGHT,
+
+	LS_MOVE_MAX = LS_REFLECT_LL + BOOT_SABERMOVES + 1//
 } saberMoveName_t;
 
 typedef enum {
@@ -1000,6 +1019,7 @@ typedef struct
 } saberMoveData_t;
 
 extern saberMoveData_t	saberMoveData[LS_MOVE_MAX];
+extern saberMoveData_t	saberMoveData15[LS_MOVE_MAX];
 
 qboolean BG_LegalizedForcePowers(char *powerOut, int maxRank, qboolean freeSaber, int teamForce, int gametype, int fpDisabled);
 
@@ -1050,7 +1070,9 @@ char *BG_StringAlloc ( const char *source );
 qboolean BG_OutOfMemory ( void );
 
 extern int WeaponReadyAnim[WP_NUM_WEAPONS];
+extern int WeaponReadyAnim15[WP_NUM_WEAPONS];
 extern int WeaponAttackAnim[WP_NUM_WEAPONS];
+extern int WeaponAttackAnim15[WP_NUM_WEAPONS];
 
 extern int forcePowerDarkLight[NUM_FORCE_POWERS];
 
@@ -1062,3 +1084,9 @@ extern int forcePowerDarkLight[NUM_FORCE_POWERS];
 #define MAX_BOTS_TEXT		8192
 
 #endif //__BG_PUBLIC_H__
+
+
+//[AnimationSys]
+float BG_GetTorsoAnimPoint( playerState_t *ps, int AnimIndex );
+float BG_GetLegsAnimPoint( playerState_t *ps, int AnimIndex );
+//[/AnimationSys]

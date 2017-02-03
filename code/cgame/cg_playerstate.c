@@ -212,7 +212,7 @@ void CG_CheckPlayerstateEvents( playerState_t *ps, playerState_t *ops ) {
 		CG_EntityEvent( cent, cent->lerpOrigin );
 	}
 
-	cent = &cg.predictedPlayerEntity; // cg_entities[ ps->clientNum ];
+	cent = &cg_entities[ ps->clientNum ];
 	// go through the predictable events buffer
 	for ( i = ps->eventSequence - MAX_PS_EVENTS ; i < ps->eventSequence ; i++ ) {
 		// if we have a new predictable event
@@ -243,7 +243,7 @@ void CG_CheckChangedPredictableEvents( playerState_t *ps ) {
 	int event;
 	centity_t	*cent;
 
-	cent = &cg.predictedPlayerEntity;
+	cent = &cg_entities[ps->clientNum];
 	for ( i = ps->eventSequence - MAX_PS_EVENTS ; i < ps->eventSequence ; i++ ) {
 		//
 		if (i >= cg.eventSequence) {
@@ -286,6 +286,8 @@ static void pushReward(sfxHandle_t sfx, qhandle_t shader, int rewardCount) {
 #endif
 
 int cgAnnouncerTime = 0; //to prevent announce sounds from playing on top of each other
+int cgAnnouncerFragLimitTime = 0;
+int cgAnnouncerTimeLimitTime = 0;
 
 /*
 ==================
@@ -332,13 +334,14 @@ void CG_CheckLocalSounds( playerState_t *ps, playerState_t *ops ) {
 	}
 
 	// health changes of more than -3 should make pain sounds
-	if (cg_oldPainSounds.integer)
+	//needed?
+	if (demo15detected || cg_oldPainSounds.integer)
 	{
 		if ( ps->stats[STAT_HEALTH] < (ops->stats[STAT_HEALTH] - 3))
 		{
 			if ( ps->stats[STAT_HEALTH] > 0 )
 			{
-				CG_PainEvent( &cg.predictedPlayerEntity, ps->stats[STAT_HEALTH] );
+				CG_PainEvent( &cg_entities[cg.predictedPlayerState.clientNum], ps->stats[STAT_HEALTH] );
 			}
 		}
 	}
@@ -357,20 +360,31 @@ void CG_CheckLocalSounds( playerState_t *ps, playerState_t *ops ) {
 		//Com_Printf("capture\n");
 	}
 	if (ps->persistant[PERS_IMPRESSIVE_COUNT] != ops->persistant[PERS_IMPRESSIVE_COUNT]) {
-		sfx = cgs.media.impressiveSound;
-
+		if (ps->persistant[PERS_IMPRESSIVE_COUNT] == 1) {
+			sfx = cgs.media.firstImpressiveSound;
+		} else {
+			sfx = cgs.media.impressiveSound;
+		}
 		pushReward(sfx, cgs.media.medalImpressive, ps->persistant[PERS_IMPRESSIVE_COUNT]);
 		reward = qtrue;
 		//Com_Printf("impressive\n");
 	}
 	if (ps->persistant[PERS_EXCELLENT_COUNT] != ops->persistant[PERS_EXCELLENT_COUNT]) {
-		sfx = cgs.media.excellentSound;
+		if (ps->persistant[PERS_EXCELLENT_COUNT] == 1) {
+			sfx = cgs.media.firstExcellentSound;
+		} else {
+			sfx = cgs.media.excellentSound;
+		}
 		pushReward(sfx, cgs.media.medalExcellent, ps->persistant[PERS_EXCELLENT_COUNT]);
 		reward = qtrue;
 		//Com_Printf("excellent\n");
 	}
 	if (ps->persistant[PERS_GAUNTLET_FRAG_COUNT] != ops->persistant[PERS_GAUNTLET_FRAG_COUNT]) {
-		sfx = cgs.media.humiliationSound;
+		if (ops->persistant[PERS_GAUNTLET_FRAG_COUNT] == 0) {
+			sfx = cgs.media.firstHumiliationSound;
+		} else {
+			sfx = cgs.media.humiliationSound;
+		}
 		pushReward(sfx, cgs.media.medalGauntlet, ps->persistant[PERS_GAUNTLET_FRAG_COUNT]);
 		reward = qtrue;
 		//Com_Printf("guantlet frag\n");
@@ -381,8 +395,8 @@ void CG_CheckLocalSounds( playerState_t *ps, playerState_t *ops ) {
 		//Com_Printf("defend\n");
 	}
 	if (ps->persistant[PERS_ASSIST_COUNT] != ops->persistant[PERS_ASSIST_COUNT]) {
-		//pushReward(cgs.media.assistSound, cgs.media.medalAssist, ps->persistant[PERS_ASSIST_COUNT]);
-		//reward = qtrue;
+		pushReward(cgs.media.assistSound, cgs.media.medalAssist, ps->persistant[PERS_ASSIST_COUNT]);
+		reward = qtrue;
 		//Com_Printf("assist\n");
 	}
 	// if any of the player event bits changed
@@ -426,8 +440,22 @@ void CG_CheckLocalSounds( playerState_t *ps, playerState_t *ops ) {
 		}
 	}
 
+	// reset if time went backward
+	if (cgs.timelimit > 0 && cg.time + 3000 < cgAnnouncerTimeLimitTime) {
+		int msec = cg.time - cgs.levelStartTime;
+
+		if (msec < (cgs.timelimit - 5) * 60 * 1000)
+			cg.timelimitWarnings = 0;
+		else if (msec < (cgs.timelimit - 1) * 60 * 1000)
+			cg.timelimitWarnings = 1;
+		else if (msec < (cgs.timelimit * 60 + 2) * 1000)
+			cg.timelimitWarnings = 1 + 2;
+
+		cgAnnouncerTimeLimitTime = 0;
+	}
+
 	// timelimit warnings
-	if ( cgs.timelimit > 0 && cgAnnouncerTime < cg.time ) {
+	if ( cgs.timelimit > 0 && cgAnnouncerTimeLimitTime < cg.time ) {
 		int		msec;
 
 		msec = cg.time - cgs.levelStartTime;
@@ -444,11 +472,34 @@ void CG_CheckLocalSounds( playerState_t *ps, playerState_t *ops ) {
 			cg.timelimitWarnings |= 1;
 			trap_S_StartLocalSound( cgs.media.fiveMinuteSound, CHAN_ANNOUNCER );
 			cgAnnouncerTime = cg.time + 3000;
+		// reset if time went backward
+		} else if (msec < (cgs.timelimit - 5) * 60 * 1000) {
+			cg.timelimitWarnings = 0;
+		} else if (msec < (cgs.timelimit - 1) * 60 * 1000) {
+			cg.timelimitWarnings = 1;
+		} else if (msec < (cgs.timelimit * 60 + 2) * 1000) {
+			cg.timelimitWarnings = 1 + 2;
 		}
 	}
 
+	// reset if time went backward
+	if (cgs.fraglimit > 0 && cgs.gametype < GT_CTF && cgs.gametype != GT_TOURNAMENT && cg.time + 3000 < cgAnnouncerFragLimitTime) {
+		highScore = cgs.scores1;
+		if (cgs.gametype == GT_TEAM && cgs.scores2 > highScore)
+			highScore = cgs.scores2;
+
+		if (cgs.fraglimit > 3 && highScore < (cgs.fraglimit - 3))
+			cg.fraglimitWarnings = 0;
+		else if (cgs.fraglimit > 2 && highScore == (cgs.fraglimit - 3))
+			cg.fraglimitWarnings = 1;
+		else if (cgs.fraglimit > 1 && highScore == (cgs.fraglimit - 2))
+			cg.fraglimitWarnings = 1 + 2;
+
+		cgAnnouncerFragLimitTime = 0;
+	}
+
 	// fraglimit warnings
-	if ( cgs.fraglimit > 0 && cgs.gametype < GT_CTF && cgs.gametype != GT_TOURNAMENT && cgAnnouncerTime < cg.time) {
+	if ( cgs.fraglimit > 0 && cgs.gametype < GT_CTF && cgs.gametype != GT_TOURNAMENT && cgAnnouncerFragLimitTime < cg.time) {
 		highScore = cgs.scores1;
 		if ( !( cg.fraglimitWarnings & 4 ) && highScore == (cgs.fraglimit - 1) ) {
 			cg.fraglimitWarnings |= 1 | 2 | 4;
@@ -464,6 +515,13 @@ void CG_CheckLocalSounds( playerState_t *ps, playerState_t *ops ) {
 			cg.fraglimitWarnings |= 1;
 			CG_AddBufferedSound(cgs.media.threeFragSound);
 			cgAnnouncerTime = cg.time + 3000;
+		// reset if time went backward
+		} else if (cgs.fraglimit > 3 && highScore < (cgs.fraglimit - 3)) {
+			cg.fraglimitWarnings = 0;
+		} else if (cgs.fraglimit > 2 && highScore == (cgs.fraglimit - 3)) {
+			cg.fraglimitWarnings = 1;
+		} else if (cgs.fraglimit > 1 && highScore == (cgs.fraglimit - 2)) {
+			cg.fraglimitWarnings = 1 + 2;
 		}
 	}
 }
@@ -508,10 +566,13 @@ void CG_TransitionPlayerState( playerState_t *ps, playerState_t *ops ) {
 	// run events
 	CG_CheckPlayerstateEvents( ps, ops );
 
+	//mme
+	cg_entities[cg.predictedPlayerState.clientNum].pe.viewHeight = ps->viewheight;
 	// smooth the ducking viewheight change
 	if ( ps->viewheight != ops->viewheight ) {
-		cg.duckChange = ps->viewheight - ops->viewheight;
-		cg.duckTime = cg.time;
+		//mme
+		cg_entities[cg.predictedPlayerState.clientNum].pe.duckChange = ps->viewheight - ops->viewheight;
+		cg_entities[cg.predictedPlayerState.clientNum].pe.duckTime = cg.time;
 	}
 }
 

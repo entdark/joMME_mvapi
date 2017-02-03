@@ -129,6 +129,8 @@ This is called explicitly when the gamestate is first received,
 and whenever the server updates any serverinfo flagged cvars
 ================
 */
+extern void trap_MVAPI_NTDetected( qboolean ntDetected );
+extern void CG_ForceNTDemo(void);
 void CG_ParseServerinfo( void ) {
 	const char	*info;
 	char	*mapname;
@@ -148,7 +150,20 @@ void CG_ParseServerinfo( void ) {
 	cgs.timelimit = atoi( Info_ValueForKey( info, "timelimit" ) );
 	cgs.maxclients = atoi( Info_ValueForKey( info, "sv_maxclients" ) );
 	mapname = Info_ValueForKey( info, "mapname" );
-
+	
+	cg.ntModDetected = qfalse;
+	saberShenanigans = qfalse;
+	cgs.gamename = Info_ValueForKey(info, "gamename");
+	if (!Q_stricmp(cgs.gamename, "< NT XII >")
+		|| !Q_stricmp(cgs.gamename, "< NT XIII >")
+		|| !Q_stricmp(cgs.gamename, "< NT XIV >")
+		/* || !Q_stricmp(gamename, "JDFix.")*/) {
+		Com_Printf("\nNT mod detected\n\n");
+	} else if (!Q_stricmp(cgs.gamename, "SaberShenanigans")) {
+		saberShenanigans = qtrue;
+		Com_Printf("\nSaberShenanigans mod detected\n\n");
+	}
+	CG_ForceNTDemo();
 
 	//rww - You must do this one here, Info_ValueForKey always uses the same memory pointer.
 	trap_Cvar_Set ( "ui_about_mapname", mapname );
@@ -188,6 +203,16 @@ static void CG_ParseWarmup( void ) {
 	cg.warmup = warmup;
 }
 
+//ent: Raz: This is a reverse map of flag statuses as seen in g_team.c
+//static char ctfFlagStatusRemap[] = { '0', '1', '*', '*', '2' };
+static char ctfFlagStatusRemap[] = { 	
+	FLAG_ATBASE,
+	FLAG_TAKEN,			// CTF
+	// server doesn't use FLAG_TAKEN_RED or FLAG_TAKEN_BLUE
+	// which was originally for 1-flag CTF.
+	FLAG_DROPPED
+};
+
 /*
 ================
 CG_SetConfigValues
@@ -195,8 +220,7 @@ CG_SetConfigValues
 Called on load to set the initial values from configure strings
 ================
 */
-void CG_SetConfigValues( void ) 
-{
+void CG_SetConfigValues( void ) {
 	const char *s;
 	const char *str;
 
@@ -204,9 +228,15 @@ void CG_SetConfigValues( void )
 	cgs.scores2 = atoi( CG_ConfigString( CS_SCORES2 ) );
 	cgs.levelStartTime = atoi( CG_ConfigString( CS_LEVEL_START_TIME ) );
 	if( cgs.gametype == GT_CTF || cgs.gametype == GT_CTY ) {
+		int redflagId = 0, blueflagId = 0;
 		s = CG_ConfigString( CS_FLAGSTATUS );
-		cgs.redflag = s[0] - '0';
-		cgs.blueflag = s[1] - '0';
+		redflagId = s[0] - '0';
+		blueflagId = s[1] - '0';
+		// fix: proper flag statuses mapping for dropped flag
+		if ( redflagId >= 0 && redflagId < ARRAY_LEN( ctfFlagStatusRemap ) ) 
+			cgs.redflag = ctfFlagStatusRemap[redflagId];
+		if ( blueflagId >= 0 && blueflagId < ARRAY_LEN( ctfFlagStatusRemap ) ) 
+			cgs.blueflag = ctfFlagStatusRemap[blueflagId];
 	}
 	cg.warmup = atoi( CG_ConfigString( CS_WARMUP ) );
 
@@ -379,10 +409,10 @@ static void CG_ConfigStringModified( void ) {
 		cgs.skins[ num-CS_CHARSKINS ] = trap_R_RegisterSkin( str );
 // Ghoul2 Insert end
 	} else if ( num >= CS_SOUNDS && num < CS_SOUNDS+MAX_SOUNDS ) {
-		if ( str[0] != '*' ) {	// player specific sounds don't register here
+		if ( str[0] && str[0] != '*' ) {	// player specific sounds don't register here
 			cgs.gameSounds[ num-CS_SOUNDS] = trap_S_RegisterSound( str );
 		}
-	} else if ( num >= CS_EFFECTS && num < CS_SOUNDS+MAX_SOUNDS ) {
+	} else if ( num >= CS_EFFECTS && num < CS_EFFECTS+MAX_FX ) {
 		if ( str[0] != '*' ) {	// player specific sounds don't register here
 			cgs.gameEffects[ num-CS_EFFECTS] = trap_FX_RegisterEffect( str );
 		}
@@ -392,8 +422,12 @@ static void CG_ConfigStringModified( void ) {
 	} else if ( num == CS_FLAGSTATUS ) {
 		if( cgs.gametype == GT_CTF || cgs.gametype == GT_CTY ) {
 			// format is rb where its red/blue, 0 is at base, 1 is taken, 2 is dropped
-			cgs.redflag = str[0] - '0';
-			cgs.blueflag = str[1] - '0';
+			int redflagId = str[0] - '0', blueflagId = str[1] - '0';
+			//ent: Raz: improved flag status remapping
+			if ( redflagId >= 0 && redflagId < ARRAY_LEN( ctfFlagStatusRemap ) ) 
+				cgs.redflag = ctfFlagStatusRemap[redflagId];
+			if ( blueflagId >= 0 && blueflagId < ARRAY_LEN( ctfFlagStatusRemap ) )  
+				cgs.blueflag = ctfFlagStatusRemap[blueflagId];
 		}
 	}
 	else if ( num == CS_SHADERSTATE ) {
@@ -459,7 +493,12 @@ static void CG_AddToTeamChat( const char *str ) {
 			ls = NULL;
 		}
 
-		if ( Q_IsColorString( str ) ) {
+		if ( demo15detected && cg.ntModDetected && Q_IsColorStringNT( str ) ) {
+			*p++ = *str++;
+			lastcolor = *str;
+			*p++ = *str++;
+			continue;
+		} else if ( Q_IsColorString( str ) ) {
 			*p++ = *str++;
 			lastcolor = *str;
 			*p++ = *str++;
@@ -532,7 +571,8 @@ void CG_KillCEntityInstances()
 		cg_entities[i].frame_minus2_refreshed = 0;
 		cg_entities[i].dustTrailTime = 0;
 		cg_entities[i].ghoul2weapon = NULL;
-//		cg_entities[i].torsoBolt = 0;
+		if (demo15detected)
+			cg_entities[i].torsoBolt = 0;
 		cg_entities[i].trailTime = 0;
 		cg_entities[i].frame_hold_time = 0;
 		cg_entities[i].frame_hold_refreshed = 0;
@@ -1160,6 +1200,9 @@ The string has been tokenized and can be retrieved with
 Cmd_Argc() / Cmd_Argv()
 =================
 */
+static char demo15chat[MAX_SAY_TEXT] = "";			//not only 1.02?
+static qboolean demo15trychat = qfalse;	//not only 1.02?
+extern void CG_ChatBox_AddString(char *chatStr); //cg_draw.c
 static void CG_ServerCommand( void ) {
 	const char	*cmd;
 	char		text[MAX_SAY_TEXT];
@@ -1169,6 +1212,11 @@ static void CG_ServerCommand( void ) {
 	if ( !cmd[0] ) {
 		// server claimed the command
 		return;
+	}
+
+	if (!(!strcmp(cmd, "chat") || !strcmp(cmd, "tchat")) && demo15trychat) {
+		CG_Printf("%s", demo15chat);
+		demo15trychat = qfalse;
 	}
 
 	if ( !strcmp( cmd, "spd" ) ) 
@@ -1275,26 +1323,49 @@ static void CG_ServerCommand( void ) {
 	if ( !strcmp( cmd, "print" ) ) {
 		char strEd[MAX_STRIPED_SV_STRING];
 		CG_CheckSVStripEdRef(strEd, CG_Argv(1));
-		CG_Printf( "%s", strEd );
+		if (!cg_chatBox.integer) {
+			CG_Printf( "%s", strEd );
+		} else {
+			Q_strncpyz(demo15chat, strEd, sizeof(demo15chat));
+			demo15trychat = qtrue;
+		}
 		return;
 	}
 
 	if ( !strcmp( cmd, "chat" ) ) {
 		if ( !cg_teamChatsOnly.integer ) {
-			trap_S_StartLocalSound( cgs.media.talkSound, CHAN_LOCAL_SOUND );
+			if (mov_chatBeep.integer)
+				trap_S_StartLocalSound( cgs.media.talkSound, CHAN_LOCAL_SOUND );
 			Q_strncpyz( text, CG_Argv(1), MAX_SAY_TEXT );
 			CG_RemoveChatEscapeChar( text );
-			CG_Printf( "%s\n", text );
+			if (demo15trychat && !strcmp( text, "" )) {
+				Q_strncpyz( text, demo15chat, MAX_SAY_TEXT );
+				demo15trychat = qfalse;
+			}
+			CG_ChatBox_AddString(text);
+			if (!cg_chatBox.integer)
+				CG_Printf( "%s\n", text );
+			else
+				CG_Printf( "*%s\n", text );
 		}
 		return;
 	}
 
 	if ( !strcmp( cmd, "tchat" ) ) {
-		trap_S_StartLocalSound( cgs.media.talkSound, CHAN_LOCAL_SOUND );
+		if (mov_chatBeep.integer)
+			trap_S_StartLocalSound( cgs.media.talkSound, CHAN_LOCAL_SOUND );
 		Q_strncpyz( text, CG_Argv(1), MAX_SAY_TEXT );
 		CG_RemoveChatEscapeChar( text );
+		if (demo15trychat && !strcmp( text, "" )) {
+			Q_strncpyz( text, demo15chat, MAX_SAY_TEXT );
+			demo15trychat = qfalse;
+		}
+		CG_ChatBox_AddString(text);
 		CG_AddToTeamChat( text );
-		CG_Printf( "%s\n", text );
+		if (!cg_chatBox.integer)
+			CG_Printf( "%s\n", text );
+		else
+			CG_Printf( "*%s\n", text );
 		return;
 	}
 	if ( !strcmp( cmd, "vchat" ) ) {
@@ -1364,4 +1435,8 @@ void CG_ExecuteNewServerCommands( int latestSequence ) {
 			CG_ServerCommand();
 		}
 	}
+	if (demo15trychat) {
+		CG_Printf("%s", demo15chat);
+	}
+	demo15trychat = qfalse;
 }

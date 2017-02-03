@@ -78,7 +78,10 @@ void CG_LoadingClient( int clientNum ) {
 	}
 */
 	Q_strncpyz( personality, Info_ValueForKey( info, "n" ), sizeof(personality) );
-	Q_CleanStr( personality );
+	if (demo15detected && cg.ntModDetected)
+		Q_CleanStrNT( personality );
+	else
+		Q_CleanStr( personality );
 
 	/*
 	if( cgs.gametype == GT_SINGLE_PLAYER ) {
@@ -86,9 +89,47 @@ void CG_LoadingClient( int clientNum ) {
 	}
 	*/
 
-	CG_LoadingString( personality );
+	if (personality[0] != 0)
+		CG_LoadingString( personality );
 }
 
+
+//	| beginning of string ......................................... max legth for 0.8 scale	|
+static const char *tips[] = {															//	|
+	"Hold CTRL and scroll mouse wheel to speed up scrolling in the console",			//	|
+	"Holding SHIFT and pressing A or D will let you jump in time for 4 seconds",		//	|
+	"To change values in the demo HUD type /hudToggle and click on yellow ones",		//	|
+	"Hold W and move mouse to change FOV in camera view",								//	|
+	"To unlock FOV switch to Camera and type /hudToggle, and check Fov checkbox",		//	|
+	"To capture in stereo 3D set any non-null value to r_stereoSeparation",				//	|
+	"Type /camera to display all camera commands",										//	|
+	"Type /chase to display all chase commands",										//	|
+	"Type /line to display all line commands",											//	|
+	"Type /capture to display all capture commands",									//	|
+	"Type /dof to display all dof commands",											//	|
+	"To fast forward to certain minute type /demoSeek time",							//	|
+	"To jump forward or back in seconds type /seek +time or /seek -time",				//	|
+	"To see activated absorb on everyone set 1 to mov_absorbVisibility",				//	|
+	"You can change colour of forces with\nmov_absorbColour, mov_protectColour or mov_rageColour",
+};
+
+static void CG_Tips(void) {
+	const int x = SCREEN_WIDTH / 2, y = SCREEN_HEIGHT, style = UI_CENTER|UI_BIGFONT|UI_DROPSHADOW;
+	const float scale = 0.8f;
+	int tip = cg.tip % (sizeof(tips)/sizeof(tips[0]));
+	char *nextString = strchr(tips[tip], '\n');
+	if (nextString) {
+		char currentString[512];
+		ptrdiff_t offset = nextString - tips[tip];
+		strncpy(currentString, tips[tip], offset);
+		currentString[offset] = 0;
+		UI_DrawScaledProportionalString(x, y - 64, currentString, style, colorCyan, scale);
+		nextString++;
+		UI_DrawScaledProportionalString(x, y - 48, nextString, style, colorCyan, scale);
+	} else {
+		UI_DrawScaledProportionalString(x, y - 48, tips[tip], style, colorCyan, scale);
+	}
+}
 
 /*
 ====================
@@ -106,7 +147,7 @@ void CG_DrawInformation( void ) {
 	int			value, valueNOFP;
 	qhandle_t	levelshot;
 	char		buf[1024];
-	int			iPropHeight = 18;	// I know, this is total crap, but as a post release asian-hack....  -Ste
+	int			iPropHeight = demo15detected?PROP_HEIGHT:18;	// I know, this is total crap, but as a post release asian-hack....  -Ste
 
 	info = CG_ConfigString( CS_SERVERINFO );
 	sysInfo = CG_ConfigString( CS_SYSTEMINFO );
@@ -145,7 +186,10 @@ void CG_DrawInformation( void ) {
 	if ( !atoi( buf ) ) {
 		// server hostname
 		Q_strncpyz(buf, Info_ValueForKey( info, "sv_hostname" ), 1024);
-		Q_CleanStr(buf);
+		if (demo15detected && cg.ntModDetected)
+			Q_CleanStrNT(buf);
+		else
+			Q_CleanStr(buf);
 		UI_DrawProportionalString( 320, y, buf,
 			UI_CENTER|UI_INFOFONT|UI_DROPSHADOW, colorWhite );
 		y += iPropHeight;
@@ -167,7 +211,7 @@ void CG_DrawInformation( void ) {
 			y += iPropHeight;
 		}
 
-		{	// display global MOTD at bottom (mirrors ui_main UI_DrawConnectScreen
+		if (!demo15detected) {	// display global MOTD at bottom (mirrors ui_main UI_DrawConnectScreen
 			char motdString[1024];
 			trap_Cvar_VariableStringBuffer( "cl_motdString", motdString, sizeof( motdString ) );
 
@@ -386,6 +430,10 @@ void CG_DrawInformation( void ) {
 	default:
 		break;
 	}
+	UI_DrawProportionalString( 320, y, "YES MME IS LOADING!",
+			UI_CENTER|UI_INFOFONT|UI_DROPSHADOW, colorWhite );
+	y += iPropHeight;
+	CG_Tips();
 }
 
 /*
@@ -393,8 +441,7 @@ void CG_DrawInformation( void ) {
 CG_LoadBar
 ===================
 */
-void CG_LoadBar(void)
-{
+void CG_LoadBar(void) {
 	const int numticks = 9, tickwidth = 40, tickheight = 8;
 	const int tickpadx = 20, tickpady = 12;
 	const int capwidth = 8;

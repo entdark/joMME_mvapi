@@ -17,7 +17,14 @@ int GetIDForString ( stringID_table_t *table, const char *string )
 	while ( ( table[index].name != NULL ) &&
 			( table[index].name[0] != 0 ) )
 	{
-		if ( !Q_stricmp( table[index].name, string ) )
+		char in[32];
+		char *match;
+		strcpy(in, table[index].name);
+		match = strstr(in, "_15");
+		if (match) {
+			*match = '\0';
+		}
+		if ( !Q_stricmp( in, string ) )
 			return table[index].id;
 
 		index++;
@@ -747,6 +754,44 @@ void Parse3DMatrix (const char **buf_p, int z, int y, int x, float *m) {
 	COM_MatchToken( buf_p, ")" );
 }
 
+/*
+===================
+Com_HexStrToInt
+===================
+*/
+int Com_HexStrToInt( const char *str )
+{
+	if ( !str || !str[ 0 ] )
+		return -1;
+
+	// check for hex code
+	if( str[ 0 ] == '0' && str[ 1 ] == 'x' )
+	{
+		int i, n = 0;
+
+		for( i = 2; i < strlen( str ); i++ )
+		{
+			char digit;
+
+			n *= 16;
+
+			digit = tolower( str[ i ] );
+
+			if( digit >= '0' && digit <= '9' )
+				digit -= '0';
+			else if( digit >= 'a' && digit <= 'f' )
+				digit = digit - 'a' + 10;
+			else
+				return -1;
+
+			n += digit;
+		}
+
+		return n;
+	}
+
+	return -1;
+}
 
 /*
 ============================================================================
@@ -925,6 +970,140 @@ void Q_strcat( char *dest, int size, const char *src ) {
 }
 
 
+const vec3_t defaultColors[10] =
+{
+	{0.0f, 0.0f, 0.0f},
+	{1.0f, 0.0f, 0.0f},
+	{0.0f, 1.0f, 0.0f},
+	{1.0f, 1.0f, 0.0f},
+	{0.0f, 0.0f, 1.0f},
+	{0.0f, 1.0f, 1.0f},
+	{1.0f, 0.0f, 1.0f},
+	{1.0f, 1.0f, 1.0f},
+	{0.6f, 0.6f, 0.6f},
+	{0.3f, 0.3f, 0.3f},
+};
+
+int Q_parseColor( const char *p, const vec3_t numberColors[10], float *color ) {
+	char c = *p++;
+	if (c >= '0' && c <='9') {
+		if (!color)
+			return 1;
+		memcpy( color, numberColors + c - '0', sizeof( vec3_t ));
+		return 1;
+	} else if ( ( c >= 'a' && c < 'u') || (c >= 'A' && c < 'U') ) {
+		int deg;
+		float angle, v;
+		if (!color)
+			return 1;
+		deg = (((c|32) - 'a') * 360) / 24;
+		angle = (DEG2RAD(deg % 120));
+		v = ((cos(angle) / cos((M_PI / 3) - angle)) + 1) / 3;
+		if ( deg <= 120) {
+			color[0] = v;
+			color[1] = 1-v;
+			color[2] = 0;
+		} else if ( deg <= 240) {
+			color[0] = 0;
+			color[1] = v;
+			color[2] = 1-v;
+		} else {
+			color[0] = 1-v;
+			color[1] = 0;
+			color[2] = v;
+		}
+		return 1;
+	} else if ( c == 'u' || c == 'U' || c == 'v' || c == 'V'
+				|| c == 'w' || c == 'W' || c == 'x' || c == 'X'
+				|| c == 'y' || c == 'Y' || c == 'z' || c == 'Z') {
+		int i;
+		int val;
+		for (i = 0;i<6;i++) {
+            int readHex;
+			c = p[i];
+			if ( c >= '0' && c<= '9') {
+                readHex = c - '0';
+			} else if ( c >= 'a' && c<= 'f') {
+				readHex = 0xa + c - 'a';
+			} else if ( c >= 'A' && c<= 'F') {
+				readHex = 0xa + c - 'A';
+			} else {
+				if (color) {
+					color[0] = color[1] = color[2] = 1.0f;
+				}
+				return 1;
+			}
+			if (!color)
+				continue;
+			if ( i & 1) {
+				val|= readHex;
+				color[i >> 1] = val * (1 / 255.0f);
+			} else {
+				val = readHex << 4;
+			}
+		}
+		return 7;
+	}
+	if (color) {
+		color[0] = color[1] = color[2] = 1.0f;
+	}
+	return 0;
+}
+
+/*
+* Find the first occurrence of find in s.
+*/
+const char *Q_stristr( const char *s, const char *find)
+{
+  char c, sc;
+  size_t len;
+
+  if ((c = *find++) != 0)
+  {
+    if (c >= 'a' && c <= 'z')
+    {
+      c -= ('a' - 'A');
+    }
+    len = strlen(find);
+    do
+    {
+      do
+      {
+        if ((sc = *s++) == 0)
+          return NULL;
+        if (sc >= 'a' && sc <= 'z')
+        {
+          sc -= ('a' - 'A');
+        }
+      } while (sc != c);
+    } while (Q_stricmpn(s, find, len) != 0);
+    s--;
+  }
+  return s;
+}
+
+int Q_PrintStrlenNT( const char *string ) {
+	int			len;
+	const char	*p;
+
+	if( !string ) {
+		return 0;
+	}
+
+	len = 0;
+	p = string;
+	while( *p ) {
+		if( Q_IsColorStringNT( p ) ) {
+			p += 2;
+			continue;
+		}
+		p++;
+		len++;
+	}
+
+	return len;
+}
+
 int Q_PrintStrlen( const char *string ) {
 	int			len;
 	const char	*p;
@@ -947,6 +1126,26 @@ int Q_PrintStrlen( const char *string ) {
 	return len;
 }
 
+char *Q_CleanStrNT( char *string ) {
+	char*	d;
+	char*	s;
+	int		c;
+
+	s = string;
+	d = string;
+	while ((c = *s) != 0 ) {
+		if ( Q_IsColorStringNT( s ) ) {
+			s++;
+		}		
+		else if ( c >= 0x20 && c <= 0x7E ) {
+			*d++ = c;
+		}
+		s++;
+	}
+	*d = '\0';
+
+	return string;
+}
 
 char *Q_CleanStr( char *string ) {
 	char*	d;
@@ -970,26 +1169,152 @@ char *Q_CleanStr( char *string ) {
 }
 
 
+/*
+==================
+Q_StripColor
+ 
+Strips coloured strings in-place using multiple passes: "fgs^^56fds" -> "fgs^6fds" -> "fgsfds"
+
+(Also strips ^8 and ^9)
+==================
+*/
+void Q_StripColor(char *text)
+{
+	qboolean doPass = qtrue;
+	char *read;
+	char *write;
+
+	while ( doPass )
+	{
+		doPass = qfalse;
+		read = write = text;
+		while ( *read )
+		{
+			if ( Q_IsColorStringExt(read) )
+			{
+				doPass = qtrue;
+				read += 2;
+			}
+			else
+			{
+				// Avoid writing the same data over itself
+				if (write != read)
+				{
+					*write = *read;
+				}
+				write++;
+				read++;
+			}
+		}
+		if ( write < read )
+		{
+			// Add trailing NUL byte if string has shortened
+			*write = '\0';
+		}
+	}
+}
+
+/*
+==================
+Q_StripColorNew
+ 
+Strips coloured strings in-place: "fgs^^^223fds" -> "fgs^^23fds"
+==================
+*/
+void Q_StripColorNewNT(char *text) {
+	char *read;
+	char *write;
+
+	read = write = text;
+	while ( *read ) {
+		if ( Q_IsColorStringNT(read) ) {
+			read += 2;
+		} else {
+			// Avoid writing the same data over itself
+			if (write != read) {
+				*write = *read;
+			}
+			write++;
+			read++;
+		}
+	}
+	if ( write < read ) {
+		// Add trailing NUL byte if string has shortened
+		*write = '\0';
+	}
+}
+void Q_StripColorNew(char *text) {
+	char *read;
+	char *write;
+
+	read = write = text;
+	while ( *read ) {
+		if ( Q_IsColorStringExt(read) ) {
+			read += 2;
+		} else {
+			// Avoid writing the same data over itself
+			if (write != read) {
+				*write = *read;
+			}
+			write++;
+			read++;
+		}
+	}
+	if ( write < read ) {
+		// Add trailing NUL byte if string has shortened
+		*write = '\0';
+	}
+}
+
+
+#ifdef _MSC_VER
+/*
+=============
+Q_vsnprintf
+ 
+Special wrapper function for Microsoft's broken _vsnprintf() function.
+MinGW comes with its own snprintf() which is not broken.
+=============
+*/
+
+int Q_vsnprintf(char *str, size_t size, const char *format, va_list ap) {
+	int retval;
+	retval = _vsnprintf(str, size, format, ap);
+	if(retval < 0 || retval == size) {
+		// Microsoft doesn't adhere to the C99 standard of vsnprintf,
+		// which states that the return value must be the number of
+		// bytes written if the output string had sufficient length.
+		//
+		// Obviously we cannot determine that value from Microsoft's
+		// implementation, so we have no choice but to return size.
+		str[size - 1] = '\0';
+		return size;
+	}
+	return retval;
+}
+#endif
+
+//Raz: Patched version of Com_sprintf
 void QDECL Com_sprintf( char *dest, int size, const char *fmt, ...) {
 	int		len;
 	va_list		argptr;
 	char	bigbuffer[32000];	// big, but small enough to fit in PPC stack
 
 	va_start (argptr,fmt);
-	len = vsprintf (bigbuffer,fmt,argptr);
+	len = vsprintf(bigbuffer, fmt, argptr);
 	va_end (argptr);
-	if ( len >= sizeof( bigbuffer ) ) {
-		Com_Error( ERR_FATAL, "Com_sprintf: overflowed bigbuffer" );
+	if (len >= sizeof(bigbuffer)) {
+		Com_Error(ERR_FATAL, "Com_sprintf: overflowed bigbuffer");
 	}
 	if (len >= size) {
-		Com_Printf ("Com_sprintf: overflow of %i in %i\n", len, size);
-#ifdef	_DEBUG
+		Com_Printf("Com_sprintf: overflow of %i in %i\n", len, size);
+#if defined	(_DEBUG) && !defined (_WIN64)
 		__asm {
 			int 3;
 		}
 #endif
 	}
-	Q_strncpyz (dest, bigbuffer, size );
+	Q_strncpyz(dest, bigbuffer, size);
 }
 
 
@@ -1367,4 +1692,6 @@ int Q_irand(int value1, int value2)
 
 //====================================================================
 
-
+//qboolean demo15detected;
+int demo_protocols[] =
+{ 15, 16, 0 };

@@ -198,6 +198,140 @@ void CG_DrawChar( int x, int y, int width, int height, int ch ) {
 
 }
 
+
+/* True Type functions */
+
+int CG_Text_Width2(const char *text, float scale, int limit) {
+  int count,len;
+	float out;
+	const mmeGlyphInfo_t *glyph;
+	float useScale;
+	const char *s = text;
+	const mmeFontInfo_t *font = &cgs.textFont;
+	useScale = scale * font->glyphScale;
+	out = 0;
+	if (text) {
+		len = strlen(text);
+		if (limit > 0 && len > limit) {
+			len = limit;
+		}
+		count = 0;
+		while (s && *s && count < len) {
+			if ( ( demo15detected && cg.ntModDetected && Q_IsColorStringNT( s ) ) || Q_IsColorString( s ) ) {
+				s += 2;
+				continue;
+			} else {
+				glyph = &font->glyphs[(int)*s];
+				out += glyph->xSkip;
+				s++;
+				count++;
+			}
+		}
+	}
+	return out * useScale;
+}
+
+int CG_Text_Height2(const char *text, float scale, int limit) {
+	int len, count;
+	float max;
+	mmeGlyphInfo_t *glyph;
+	float useScale;
+	const char *s = text;
+	mmeFontInfo_t *font = &cgs.textFont;
+	useScale = scale * font->glyphScale;
+	max = 0;
+	if (text) {
+		len = strlen(text);
+		if (limit > 0 && len > limit) {
+			len = limit;
+		}
+		count = 0;
+		while (s && *s && count < len) {
+			if ( ( demo15detected && cg.ntModDetected && Q_IsColorStringNT( s ) ) || Q_IsColorString( s ) ) {
+				s += 2;
+				continue;
+			} else {
+				glyph = &font->glyphs[(int)*s];
+
+				if (max < glyph->height) {
+					max = glyph->height;
+				}
+				s++;
+				count++;
+			}
+		}
+	}
+	return max * useScale;
+}
+
+static void CG_Text_PaintChar(float x, float y, float width, float height, float scale, float s, float t, float s2, float t2, qhandle_t hShader) {
+  float w, h;
+  w = width * scale;
+  h = height * scale;
+  trap_R_DrawStretchPic( x, y, w, h, s, t, s2, t2, hShader );
+}
+
+void CG_Text_Paint2(float x, float y, float scale, vec4_t color, const char *text, qboolean shadowed ) {
+	int len, count;
+	vec4_t newColor;
+	mmeGlyphInfo_t *glyph;
+	float useScale;
+	mmeFontInfo_t *font = &cgs.textFont;
+	useScale = scale * font->glyphScale;
+	if (text) {
+		const char *s = text;
+		trap_R_SetColor( color );
+		memcpy(&newColor[0], &color[0], sizeof(vec4_t));
+		len = strlen(text);
+		count = 0;
+		while (s && *s && count < len) {
+			int colorLen;
+			glyph = &font->glyphs[(int)*s]; // TTimo: FIXME: getting nasty warnings without the cast, hopefully this doesn't break the VM build
+			//int yadj = Assets.textFont.glyphs[text[i]].bottom + Assets.textFont.glyphs[text[i]].top;
+			//float yadj = scale * (Assets.textFont.glyphs[text[i]].imageHeight - Assets.textFont.glyphs[text[i]].height);
+			if ( demo15detected && cg.ntModDetected && Q_IsColorStringNT( s ) ) {
+				memcpy( newColor, g_color_table_nt[ColorIndexNT(*(s+1))], sizeof( newColor ) );
+				newColor[3] = color[3];
+				trap_R_SetColor( newColor );
+				s += 2;
+				continue;
+			} else if ( Q_IsColorString( s ) ) {
+				memcpy( newColor, g_color_table[ColorIndex(*(s+1))], sizeof( newColor ) );
+				newColor[3] = color[3];
+				trap_R_SetColor( newColor );
+				s += 2;
+				continue;
+			} else {
+				float yadj = useScale * glyph->top;
+				if ( shadowed ) {
+					int ofs = 2;
+					colorBlack[3] = newColor[3];
+					trap_R_SetColor( colorBlack );
+					CG_Text_PaintChar(x + ofs, y - yadj + ofs, 
+														glyph->imageWidth,
+														glyph->imageHeight,
+														useScale, 
+														glyph->s,
+														glyph->t,
+														glyph->s2,
+														glyph->t2,
+														glyph->glyph);
+					colorBlack[3] = 1.0;
+					trap_R_SetColor( newColor );
+				}
+				CG_Text_PaintChar(x, y - yadj, 
+					glyph->imageWidth, glyph->imageHeight,
+					useScale, glyph->s,	glyph->t, glyph->s2, glyph->t2, glyph->glyph);
+				x += (glyph->xSkip * useScale);
+				s++;
+				count++;
+			}
+		}
+		trap_R_SetColor( NULL );
+	}
+}
+
+
 /*
 ==================
 CG_DrawStringExt
@@ -241,11 +375,11 @@ void CG_DrawStringExt( int x, int y, const char *string, const float *setColor,
 			s = string;
 			xx = x;
 			while ( *s ) {
-				if ( Q_IsColorString( s ) ) {
+				if ( ( demo15detected && cg.ntModDetected && Q_IsColorStringNT( s ) ) || Q_IsColorString( s ) ) {
 					s += 2;
 					continue;
 				}
-				CG_DrawChar( xx + 2, y + 2, charWidth, charHeight, *s );
+				CG_DrawChar( xx + 2*cgs.widthRatioCoef, y + 2, charWidth, charHeight, *s );
 				xx += charWidth;
 				s++;
 			}
@@ -256,7 +390,15 @@ void CG_DrawStringExt( int x, int y, const char *string, const float *setColor,
 		xx = x;
 		trap_R_SetColor( setColor );
 		while ( *s ) {
-			if ( Q_IsColorString( s ) ) {
+			if ( demo15detected && cg.ntModDetected && Q_IsColorStringNT( s ) ) {
+				if ( !forceColor ) {
+					memcpy( color, g_color_table_nt[ColorIndexNT(*(s+1))], sizeof( color ) );
+					color[3] = setColor[3];
+					trap_R_SetColor( color );
+				}
+				s += 2;
+				continue;
+			} else if ( Q_IsColorString( s ) ) {
 				if ( !forceColor ) {
 					memcpy( color, g_color_table[ColorIndex(*(s+1))], sizeof( color ) );
 					color[3] = setColor[3];
@@ -278,7 +420,7 @@ void CG_DrawBigString( int x, int y, const char *s, float alpha ) {
 
 	color[0] = color[1] = color[2] = 1.0;
 	color[3] = alpha;
-	CG_DrawStringExt( x, y, s, color, qfalse, qtrue, BIGCHAR_WIDTH, BIGCHAR_HEIGHT, 0 );
+	CG_DrawStringExt( x, y, s, color, qfalse, qtrue, BIGCHAR_WIDTH*cgs.widthRatioCoef, BIGCHAR_HEIGHT, 0 );
 }
 
 void CG_DrawBigStringColor( int x, int y, const char *s, vec4_t color ) {
@@ -309,7 +451,8 @@ int CG_DrawStrlen( const char *str ) {
 	int count = 0;
 
 	while ( *s ) {
-		if ( Q_IsColorString( s ) ) {
+		if ( ( demo15detected && cg.ntModDetected && Q_IsColorStringNT( s ) )
+			|| Q_IsColorString( s ) ) {
 			s += 2;
 		} else {
 			count++;
@@ -385,22 +528,27 @@ CG_FadeColor
 ================
 */
 float *CG_FadeColor( int startMsec, int totalMsec ) {
-	static vec4_t		color;
-	int			t;
+	static vec4_t color;
+	float t;
 
 	if ( startMsec == 0 ) {
 		return NULL;
 	}
 
-	t = cg.time - startMsec;
+	t = (cg.time - startMsec) + cg.timeFraction;
 
 	if ( t >= totalMsec ) {
 		return NULL;
 	}
 
+	// this color shouldn't be visible yet
+	if (t < 0){
+		return NULL;
+	}
+
 	// fade out
 	if ( totalMsec - t < FADE_TIME ) {
-		color[3] = ( totalMsec - t ) * 1.0/FADE_TIME;
+		color[3] = ((float)totalMsec - t) * 1.0f / FADE_TIME;
 	} else {
 		color[3] = 1.0;
 	}
@@ -488,12 +636,12 @@ Take x,y positions as if 640 x 480 and scales them to the proper resolution
 
 ==============
 */
-void CG_DrawNumField (int x, int y, int width, int value,int charWidth,int charHeight,int style,qboolean zeroFill) 
+void CG_DrawNumField (float x, float y, int width, float value,float charWidth,float charHeight,int style,qboolean zeroFill) 
 {
 	char	num[16], *ptr;
 	int		l;
 	int		frame;
-	int		xWidth;
+	float	xWidth;
 	int		i = 0;
 
 	if (width < 1) {
@@ -524,7 +672,7 @@ void CG_DrawNumField (int x, int y, int width, int value,int charWidth,int charH
 		break;
 	}
 
-	Com_sprintf (num, sizeof(num), "%i", value);
+	Com_sprintf (num, sizeof(num), "%i", (int)value);
 	l = strlen(num);
 	if (l > width)
 		l = width;
@@ -536,11 +684,11 @@ void CG_DrawNumField (int x, int y, int width, int value,int charWidth,int charH
 		xWidth = charWidth;
 		break;
 	case NUM_FONT_CHUNKY:
-		xWidth = (charWidth/1.2f) + 2;
+		xWidth = (charWidth/1.2f) + 2.0f;
 		break;
 	default:
 	case NUM_FONT_BIG:
-		xWidth = (charWidth/2) + 7;//(charWidth/6);
+		xWidth = (charWidth/2.0f) + 7.0f;//(charWidth/6);
 		break;
 	}
 
@@ -551,22 +699,22 @@ void CG_DrawNumField (int x, int y, int width, int value,int charWidth,int charH
 			switch(style)
 			{
 			case NUM_FONT_SMALL:
-				CG_DrawPic( x,y, charWidth, charHeight, cgs.media.smallnumberShaders[0] );
+				CG_DrawPic( x,y, charWidth*cgs.widthRatioCoef, charHeight, cgs.media.smallnumberShaders[0] );
 				break;
 			case NUM_FONT_CHUNKY:
-				CG_DrawPic( x,y, charWidth, charHeight, cgs.media.chunkyNumberShaders[0] );
+				CG_DrawPic( x,y, charWidth*cgs.widthRatioCoef, charHeight, cgs.media.chunkyNumberShaders[0] );
 				break;
 			default:
 			case NUM_FONT_BIG:
-				CG_DrawPic( x,y, charWidth, charHeight, cgs.media.numberShaders[0] );
+				CG_DrawPic( x,y, charWidth*cgs.widthRatioCoef, charHeight, cgs.media.numberShaders[0] );
 				break;
 			}
-			x += 2 + (xWidth);
+			x += 2 + (xWidth)*cgs.widthRatioCoef;
 		}
 	}
 	else
 	{
-		x += 2 + (xWidth)*(width - l);
+		x += (2 + (xWidth)*(width - l))*cgs.widthRatioCoef;
 	}
 
 	ptr = num;
@@ -580,19 +728,19 @@ void CG_DrawNumField (int x, int y, int width, int value,int charWidth,int charH
 		switch(style)
 		{
 		case NUM_FONT_SMALL:
-			CG_DrawPic( x,y, charWidth, charHeight, cgs.media.smallnumberShaders[frame] );
+			CG_DrawPic( x,y, charWidth*cgs.widthRatioCoef, charHeight, cgs.media.smallnumberShaders[frame] );
 			x++;	// For a one line gap
 			break;
 		case NUM_FONT_CHUNKY:
-			CG_DrawPic( x,y, charWidth, charHeight, cgs.media.chunkyNumberShaders[frame] );
+			CG_DrawPic( x,y, charWidth*cgs.widthRatioCoef, charHeight, cgs.media.chunkyNumberShaders[frame] );
 			break;
 		default:
 		case NUM_FONT_BIG:
-			CG_DrawPic( x,y, charWidth, charHeight, cgs.media.numberShaders[frame] );
+			CG_DrawPic( x,y, charWidth*cgs.widthRatioCoef, charHeight, cgs.media.numberShaders[frame] );
 			break;
 		}
 
-		x += (xWidth);
+		x += (xWidth)*cgs.widthRatioCoef;
 		ptr++;
 		l--;
 	}
@@ -606,7 +754,15 @@ void UI_DrawProportionalString( int x, int y, const char* str, int style, vec4_t
 	//	is dumb, but for now...
 	//
 	int iStyle = 0;
+	char s[1024];
 	int iMenuFont = (style & UI_SMALLFONT) ? FONT_SMALL : FONT_MEDIUM;
+
+	// the best fix in the world
+	Q_strncpyz(s, str, sizeof(s) - 2);
+	if (demo15detected && cg.ntModDetected)
+		Q_StripColorNewNT(s);
+	else
+		Q_StripColorNew(s);
 
 	switch (style & (UI_LEFT|UI_CENTER|UI_RIGHT))
 	{
@@ -619,13 +775,15 @@ void UI_DrawProportionalString( int x, int y, const char* str, int style, vec4_t
 
 		case UI_CENTER:
 		{
-			x -= CG_Text_Width(str, 1.0, iMenuFont) / 2;
+//			x -= CG_Text_Width(str, 1.0, iMenuFont) / 2;
+			x -= CG_Text_Width(s, 1.0, iMenuFont) / 2;
 		}
 		break;
 
 		case UI_RIGHT:
 		{
-			x -= CG_Text_Width(str, 1.0, iMenuFont) / 2;
+//			x -= CG_Text_Width(str, 1.0, iMenuFont) / 2;
+			x -= CG_Text_Width(s, 1.0, iMenuFont) / 2;
 		}
 		break;
 	}
