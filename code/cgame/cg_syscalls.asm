@@ -164,7 +164,7 @@ equ trap_MVAPI_Key_GetOverstrikeMode		-707	; MVAPI_KEY_GETOVERSTRIKEMODE
 equ trap_MVAPI_Key_SetOverstrikeMode		-708	; MVAPI_KEY_SETOVERSTRIKEMODE 
 equ trap_MVAPI_S_UpdateScale				-709	; MVAPI_S_UPDATE_SCALE 
 equ trap_MVAPI_FX_Reset						-710	; MVAPI_FX_RESET 
-equ trap_MVAPI_R_RatioFix					-712	; MVAPI_R_RATIOFIX 
+equ trap_MVAPI_R_RatioFix					-711	; MVAPI_R_RATIOFIX 
 equ trap_MVAPI_RandomSeed					-712	; MVAPI_RANDOMSEED 
 equ trap_MVAPI_NTDetected					-713	; MVAPI_RANDOMSEED 
 equ trap_MVAPI_HighPrecision				-714	; MVAPI_HIGH_PRECISION 
