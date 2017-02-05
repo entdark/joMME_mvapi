@@ -33,7 +33,7 @@ equ trap_CM_TransformedCapsuleTrace			 -30	; CG_CM_TRANSFORMEDCAPSULETRACE
 equ trap_CM_MarkFragments					 -31	; CG_CM_MARKFRAGMENTS 
 equ trap_S_StopSound						 -32	; CG_S_MUTESOUND 
 equ trap_S_StartSound						 -33	; CG_S_STARTSOUND 
-equ trap_S_StartLocalSound					 -34	; CG_S_STARTLOCALSOUND 
+equ trap_S_StartLocalSound_Real				 -34	; CG_S_STARTLOCALSOUND 
 equ trap_S_ClearLoopingSounds				 -35	; CG_S_CLEARLOOPINGSOUNDS 
 equ trap_S_AddLoopingSound					 -36	; CG_S_ADDLOOPINGSOUND 
 equ trap_S_UpdateEntityPosition				 -37	; CG_S_UPDATEENTITYPOSITION 
@@ -48,7 +48,7 @@ equ trap_R_RegisterSkin						 -45	; CG_R_REGISTERSKIN
 equ trap_R_RegisterShader					 -46	; CG_R_REGISTERSHADER 
 equ trap_R_RegisterShaderNoMip				 -47	; CG_R_REGISTERSHADERNOMIP 
 equ trap_R_RegisterFont						 -48	; CG_R_REGISTERFONT 
-equ trap_R_Font_StrLenPixels				 -49	; CG_R_FONT_STRLENPIXELS 
+equ trap_R_Font_StrLenPixels_Real			 -49	; CG_R_FONT_STRLENPIXELS 
 equ trap_R_Font_StrLenChars					 -50	; CG_R_FONT_STRLENCHARS 
 equ trap_R_Font_HeightPixels				 -51	; CG_R_FONT_STRHEIGHTPIXELS 
 equ trap_R_Font_DrawString					 -52	; CG_R_FONT_DRAWSTRING 
@@ -112,8 +112,8 @@ equ trap_FX_PlaySimpleEffect				-256	; CG_FX_PLAY_SIMPLE_EFFECT
 equ trap_FX_PlayEffect						-257	; CG_FX_PLAY_EFFECT 
 equ trap_FX_PlayEntityEffect				-258	; CG_FX_PLAY_ENTITY_EFFECT 
 equ trap_FX_PlaySimpleEffectID				-259	; CG_FX_PLAY_SIMPLE_EFFECT_ID 
-equ trap_FX_PlayEffectID					-260	; CG_FX_PLAY_EFFECT_ID 
-equ trap_FX_PlayEntityEffectID				-261	; CG_FX_PLAY_ENTITY_EFFECT_ID 
+equ trap_FX_PlayEffectID_Real				-260	; CG_FX_PLAY_EFFECT_ID 
+equ trap_FX_PlayEntityEffectID_Real			-261	; CG_FX_PLAY_ENTITY_EFFECT_ID 
 equ trap_FX_PlayBoltedEffectID				-262	; CG_FX_PLAY_BOLTED_EFFECT_ID 
 equ trap_FX_AddScheduledEffects				-263	; CG_FX_ADD_SCHEDULED_EFFECTS 
 equ trap_FX_InitSystem						-264	; CG_FX_INIT_SYSTEM 
@@ -122,7 +122,7 @@ equ trap_FX_AdjustTime						-266	; CG_FX_ADJUST_TIME
 equ trap_FX_AddPoly							-267	; CG_FX_ADDPOLY 
 equ trap_FX_AddBezier						-268	; CG_FX_ADDBEZIER 
 equ trap_FX_AddPrimitive					-269	; CG_FX_ADDPRIMITIVE 
-equ trap_FX_AddSprite						-270	; CG_FX_ADDSPRITE 
+equ trap_FX_AddSprite_Real					-270	; CG_FX_ADDSPRITE 
 equ trap_SP_Print							-271	; CG_SP_PRINT 
 equ trap_SP_GetStringTextString				-272	; CG_SP_GETSTRINGTEXTSTRING 
 equ trap_SP_Register						-273	; CG_SP_REGISTER 

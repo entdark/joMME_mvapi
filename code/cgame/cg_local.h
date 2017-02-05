@@ -2182,6 +2182,7 @@ void		trap_S_StopLoopingSound(int entnum);
 
 // a local sound is always played full volume
 void		trap_S_StartLocalSound( sfxHandle_t sfx, int channelNum );
+void		trap_S_StartLocalSound_Real( sfxHandle_t sfx, int channelNum );
 void		trap_S_ClearLoopingSounds( qboolean killall );
 void		trap_S_AddLoopingSound( int entityNum, const vec3_t origin, const vec3_t velocity, sfxHandle_t sfx );
 void		trap_S_AddRealLoopingSound( int entityNum, const vec3_t origin, const vec3_t velocity, sfxHandle_t sfx );
@@ -2205,6 +2206,7 @@ qhandle_t	trap_R_RegisterShader( const char *name );			// returns all white if n
 qhandle_t	trap_R_RegisterShaderNoMip( const char *name );			// returns all white if not found
 qhandle_t	trap_R_RegisterFont( const char *name );
 int			trap_R_Font_StrLenPixels(const char *text, const int iFontIndex, const float scale);
+int			trap_R_Font_StrLenPixels_Real(const char *text, const int iFontIndex, const float scale);
 int			trap_R_Font_StrLenChars(const char *text);
 int			trap_R_Font_HeightPixels(const int iFontIndex, const float scale);
 void		trap_R_Font_DrawString(float ox, float oy, const char *text, const float *rgba, const int setIndex, int iCharLimit, const float scale);
@@ -2335,7 +2337,10 @@ void trap_FX_PlayEntityEffect( const char *file, vec3_t org,
 						vec3_t axis[3], const int boltInfo, const int entNum );
 void trap_FX_PlaySimpleEffectID( int id, vec3_t org );					// uses a default up axis
 void trap_FX_PlayEffectID( int id, vec3_t org, vec3_t fwd );		// builds arbitrary perp. right vector, does a cross product to define up
+void trap_FX_PlayEffectID_Real( int id, vec3_t org, vec3_t fwd );		// builds arbitrary perp. right vector, does a cross product to define up
 void trap_FX_PlayEntityEffectID( int id, vec3_t org, 
+						vec3_t axis[3], const int boltInfo, const int entNum );
+void trap_FX_PlayEntityEffectID_Real( int id, vec3_t org, 
 						vec3_t axis[3], const int boltInfo, const int entNum );
 void trap_FX_PlayBoltedEffectID( int id, sharedBoltInterface_t *fxObj );
 void trap_FX_AddScheduledEffects( void );
@@ -2347,6 +2352,7 @@ void trap_FX_AddPoly( addpolyArgStruct_t *p );
 void trap_FX_AddBezier( addbezierArgStruct_t *p );
 void trap_FX_AddPrimitive( effectTrailArgStruct_t *p );
 void trap_FX_AddSprite( addspriteArgStruct_t *p );
+void trap_FX_AddSprite_Real( addspriteArgStruct_t *p );
 
 void trap_SP_Print(const unsigned ID, byte *Data);
 int trap_SP_GetStringTextString(const char *text, char *buffer, int bufferLength);

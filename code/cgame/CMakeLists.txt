@@ -56,6 +56,7 @@ set(MMECGAMESOURCES
 	"${SRCDir}/cgame/cg_scoreboard.c"
 	"${SRCDir}/cgame/cg_servercmds.c"
 	"${SRCDir}/cgame/cg_snapshot.c"
+	"${SRCDir}/cgame/cg_syscalls_wrappers.c"
 	"${SRCDir}/cgame/cg_turret.c"
 	"${SRCDir}/cgame/cg_view.c"
 	"${SRCDir}/cgame/cg_weaponinit.c"
