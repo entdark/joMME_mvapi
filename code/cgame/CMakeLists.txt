@@ -86,6 +86,7 @@ set(MMECGAMESOURCES
 	"${SRCDir}/cgame/cg_demos.c"
 	"${SRCDir}/cgame/cg_demos_camera.c"
 	"${SRCDir}/cgame/cg_demos_capture.c"
+	"${SRCDir}/cgame/cg_demos_cut.c"
 	"${SRCDir}/cgame/cg_demos_dism.c"
 	"${SRCDir}/cgame/cg_demos_dof.c"
 	"${SRCDir}/cgame/cg_demos_hud.c"
