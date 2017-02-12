@@ -27,7 +27,7 @@ set(MMECGAMEHEADERS
 	"${SRCDir}/qcommon/qfiles.h"
 	"${SRCDir}/qcommon/tags.h"
 
-	"${SRCDir}/ghoul2/g2.h"
+	"${SRCDir}/ghoul2/G2.h"
 
 	"${SRCDir}/cgame/bg_demos.h"
 	"${SRCDir}/cgame/cg_demos.h"
